@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-project(nrengine VERSION 0.3.1 LANGUAGES C)
+project(nrengine VERSION 0.3.2 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)

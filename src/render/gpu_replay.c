@@ -82,7 +82,7 @@ static void refresh(nr_gpu_replay_state *st, const nr_gpu_ops *ops)
     st->dirty = false;
 }
 
-static void fill_common(nr_gvtx *o, const nr_rcmd *c, const nr_gfx_settings *s)
+static void fill_common(nr_gvtx *o, const nr_rcmd *c, const nr_gfx_settings *s, bool hires)
 {
     u32 fl = 0;
     bool sprite = (c->flags & RF_SPRITE) != 0;
@@ -97,6 +97,15 @@ static void fill_common(nr_gvtx *o, const nr_rcmd *c, const nr_gfx_settings *s)
     o->mode = c->tp_mode;
     o->flags = (float)fl;
     o->umin = c->uv_min_u; o->vmin = c->uv_min_v; o->umax = c->uv_max_u; o->vmax = c->uv_max_v;
+    /* Above 1x a polygon also covers the fractional area next to its right
+     * and bottom edges, which the console never draws; its texture
+     * coordinate there reaches the vertex maximum (one texel outside the
+     * picture, e.g. the seam between the two halves of a 320-pixel
+     * background). Clamp to max - 1 as the console's last pixel does. */
+    if (hires && !sprite) {
+        if (o->umax > o->umin) o->umax -= 1;
+        if (o->vmax > o->vmin) o->vmax -= 1;
+    }
     o->twmx = (float)((c->texwin & 0x1F) * 8);
     o->twmy = (float)(((c->texwin >> 5) & 0x1F) * 8);
     o->twox = (float)(((c->texwin >> 10) & 0x1F) * 8);
@@ -133,7 +142,7 @@ static void emit_prim(nr_gpu_replay_state *st, const nr_rcmd *c, const nr_gfx_se
     if (sc[0] >= sc[2] || sc[1] >= sc[3]) return;
     if (c->type == R_TRI) {
         for (i = 0; i < 3; i++) {
-            fill_common(&tri[i], c, s);
+            fill_common(&tri[i], c, s, sx > 1 || sy > 1);
             set_vtx(&tri[i], &c->v[i], &c->v[0], gour, sx, sy, c, (c->flags & RF_PRECISE) != 0);
         }
         nv = 3;
@@ -155,7 +164,7 @@ static void emit_prim(nr_gpu_replay_state *st, const nr_rcmd *c, const nr_gfx_se
         px[3] = ax + (xm ? 0 : 1); py[3] = ay + (xm ? 1 : 0);
         for (i = 0; i < 6; i++) {
             int k = idx[i];
-            fill_common(&tri[i], c, s);
+            fill_common(&tri[i], c, s, sx > 1 || sy > 1);
             tri[i].x = px[k] * (float)sx;
             tri[i].y = py[k] * (float)sy;
             tri[i].r = gour ? src[k]->r : a->r;

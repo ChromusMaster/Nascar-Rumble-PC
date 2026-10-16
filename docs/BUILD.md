@@ -56,7 +56,7 @@ sudo pacman -S --needed base-devel cmake sdl2
 ### 3.2 Build with the helper script
 
 ```sh
-cd nrengine-0.3.1
+cd nrengine-0.3.2
 scripts/build.sh                 # Release build in ./build
 scripts/build.sh Debug           # debug build
 BUILD_DIR=out scripts/build.sh   # other build folder
@@ -150,7 +150,7 @@ The script:
 4. runs CPack with the DEB generator. `dpkg-shlibdeps` reads the binaries and
    fills `Depends:` with the exact libraries they use (for example
    `libc6`, `libsdl2-2.0-0`);
-5. writes `dist/nrengine_0.3.1_<arch>.deb` (and a `.tar.gz` with the same
+5. writes `dist/nrengine_0.3.2_<arch>.deb` (and a `.tar.gz` with the same
    layout).
 
 ### 4.2 By hand
@@ -164,9 +164,9 @@ cd build-deb && cpack -G DEB
 ### 4.3 Check and install
 
 ```sh
-dpkg-deb --info     dist/nrengine_0.3.1_amd64.deb   # metadata and dependencies
-dpkg-deb --contents dist/nrengine_0.3.1_amd64.deb   # file list
-sudo apt install ./dist/nrengine_0.3.1_amd64.deb     # apt resolves libsdl2 automatically
+dpkg-deb --info     dist/nrengine_0.3.2_amd64.deb   # metadata and dependencies
+dpkg-deb --contents dist/nrengine_0.3.2_amd64.deb   # file list
+sudo apt install ./dist/nrengine_0.3.2_amd64.deb     # apt resolves libsdl2 automatically
 nrlauncher                                           # or "NR Engine" in the applications menu
 sudo apt remove nrengine                             # remove
 ```

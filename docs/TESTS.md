@@ -46,6 +46,7 @@ packaging.
 | native routines | 1 500 frames with `--verify-natives`: zero mismatches and at least one check per replaced routine |
 | regression (boot) | VRAM CRC32 at frame 400 = reference |
 | regression (race) | scripted input through the menus into the race with the accelerator pressed; VRAM CRC32 at frame 5 600 = reference; more than 100 000 primitives drawn |
+| memory card | Game Options > Load and Save > Save on a new card image: the image holds the `MC` header and the directory entry `BASLUS-01068` in use (0x51) |
 | RAM reserved for mods | 0x6000–0xBFFF stays zero up to the race without mods (neither the game nor the HLE kernel uses it) |
 | picture enhancements | the same race with 2× + AA 16x + 24-bit + bilinear + PGXP + CRT + ACES produces the same console VRAM |
 

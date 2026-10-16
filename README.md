@@ -29,6 +29,18 @@ This keeps the behaviour faithful from day one (including the original's
 quirks) while the reimplementation advances function by function. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/NATIVE.md](docs/NATIVE.md).
 
+## What is new in 0.3.2
+
+- Fixed: the game said "No MEMORY CARD" even with `memcard1.mcd` present.
+  The HLE kernel now delivers the memory-card events in the same order and
+  number as the retail BIOS (a low-level event for every sector, the
+  high-level event before the low-level one, "busy" while an operation runs).
+  Saving and loading from Game Options > Load and Save work and are covered by
+  a test.
+- Fixed: a thin vertical line in the middle of full-screen backgrounds at
+  internal resolutions above 1x (texture coordinate one texel past the
+  picture at the polygon edge).
+
 ## What is new in 0.3.1
 
 - Fixed: the launcher closed (crashed) on Windows when a drop-down list was
@@ -65,7 +77,7 @@ Validated in practice with the reference image (executable SHA-1
 | Legal screen, EA logos (MDEC video), intro video | works (intro at 15 fps) |
 | Title, menus, car and track selection, loading screens | works |
 | 3D race (countdown, AI cars, HUD, speedometer, sound) | works |
-| Memory card (`.mcd` image, formatted automatically) | implemented (HLE); saving/loading from the menus not systematically verified |
+| Memory card (`.mcd` image, formatted automatically) | works: saving and loading from Game Options > Load and Save verified (0.3.2) |
 | Launcher → engine, Esc dialog | verified on Linux (OpenGL) and under Wine (Direct3D 11) |
 | OpenGL renderer | verified on Linux (Mesa) up to the race |
 | Direct3D 9/10/11 | verified **only under Wine** |
@@ -81,7 +93,7 @@ differences and pending items are in [docs/STATUS.md](docs/STATUS.md).
 **Debian / Ubuntu** (package built with `scripts/build_deb.sh`):
 
 ```sh
-sudo apt install ./nrengine_0.3.1_amd64.deb
+sudo apt install ./nrengine_0.3.2_amd64.deb
 nrlauncher        # or "NR Engine" in the applications menu
 ```
 

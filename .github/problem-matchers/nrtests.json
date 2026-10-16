@@ -1,0 +1,24 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "nr-tests",
+      "pattern": [
+        {
+          "regexp": "^\\s*FAILED\\s+(.*?):(\\d+):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "message": 3
+        }
+      ]
+    },
+    {
+      "owner": "nr-sanitizer",
+      "pattern": [
+        {
+          "regexp": "^==\\d+==ERROR:\\s+(\\w+Sanitizer:.*)$",
+          "message": 1
+        }
+      ]
+    }
+  ]
+}

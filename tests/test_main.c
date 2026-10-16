@@ -41,8 +41,8 @@ static int g_pass, g_fail, g_skip;
 /* ---------------------------------------------------------------- helpers */
 
 /* tiny MIPS encoders for test programs */
-#define R_(op, rs, rt, rd, sa, fn) ((u32)(((op) << 26) | ((rs) << 21) | ((rt) << 16) | ((rd) << 11) | ((sa) << 6) | (fn)))
-#define I_(op, rs, rt, imm) ((u32)(((op) << 26) | ((rs) << 21) | ((rt) << 16) | ((u32)(imm) & 0xFFFF)))
+#define R_(op, rs, rt, rd, sa, fn) ((u32)(((u32)(op) << 26) | ((u32)(rs) << 21) | ((u32)(rt) << 16) | ((u32)(rd) << 11) | ((u32)(sa) << 6) | (u32)(fn)))
+#define I_(op, rs, rt, imm) ((u32)(((u32)(op) << 26) | ((u32)(rs) << 21) | ((u32)(rt) << 16) | ((u32)(imm) & 0xFFFF)))
 #define ADDIU(rt, rs, imm) I_(9, rs, rt, imm)
 #define ORI(rt, rs, imm) I_(13, rs, rt, imm)
 #define LUI(rt, imm) I_(15, 0, rt, imm)

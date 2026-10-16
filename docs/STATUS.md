@@ -126,6 +126,14 @@ Each item may produce behaviour different from the real hardware.
 
 ### Emulation fixes recorded
 
+- *Sanitizer findings (0.3.2)*: AddressSanitizer found an out-of-bounds
+  read in the audio rate control (`audio_sync.c`, position exactly -1.0 read
+  two samples before the block); UndefinedBehaviorSanitizer found left shifts
+  of negative values in the GPU line/triangle set-up, the GTE (MAC set-up,
+  GPL, colour commands) and the SPU envelope. All fixed without changing
+  results (GTE still 0 differences on the 1 150 hardware vectors, regression
+  CRCs unchanged); the boot-to-race run with 2x, filtering and PGXP is clean
+  under both sanitizers. CI now runs the sanitizers on every push.
 - *Memory card not detected (0.3.2)*: the game reported "No MEMORY CARD"
   even with a card image. Its card driver relies on the retail BIOS event
   sequence: `_card_load` reads 16 directory sectors and produces a HwCARD

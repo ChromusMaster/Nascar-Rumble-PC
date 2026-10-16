@@ -1,5 +1,6 @@
 #include "audio_sync.h"
 
+#include <math.h>
 #include <string.h>
 
 #define MAX_DEVIATION 0.005
@@ -29,11 +30,12 @@ u32 nr_audio_sync_process(nr_audio_sync *s, const s16 *in, u32 n, u32 queued, s1
     /* Linear interpolation; input index i refers to in[i], index -1 to prev. */
     while (o < cap) {
         double p = s->pos;
-        int i0 = (int)p - (p < 0 ? 1 : 0);
+        int i0 = (int)floor(p);   /* (int)p - 1 was wrong for p == -1.0 exactly: in[-2] was read */
         double f = p - (double)i0;
         s16 a[2], b[2];
         int ch;
         if (i0 + 1 >= (int)n) break;
+        if (i0 < -1) i0 = -1, f = 0.0;   /* never before the previous block's last frame */
         if (i0 < 0) { a[0] = s->prev[0]; a[1] = s->prev[1]; }
         else { a[0] = in[i0 * 2]; a[1] = in[i0 * 2 + 1]; }
         b[0] = in[(i0 + 1) * 2]; b[1] = in[(i0 + 1) * 2 + 1];

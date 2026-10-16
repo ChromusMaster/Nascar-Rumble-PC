@@ -171,7 +171,7 @@ static void env_tick(env_state *e, s32 *level)
     s32 inc;
     if (e->never) return;
     if (e->dec ^ e->phase_neg) step = ~step;
-    step <<= (11 - shift) > 0 ? (11 - shift) : 0;
+    step = (s32)((u32)step << ((11 - shift) > 0 ? (11 - shift) : 0));   /* two's-complement shift without UB */
     inc = 0x8000 >> ((shift - 11) > 0 ? (shift - 11) : 0);
     if (e->exp && !e->dec && *level > 0x6000) {
         if (shift < 10) step >>= 2;

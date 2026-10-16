@@ -28,7 +28,9 @@ echo "== compiling with $JOBS parallel jobs"
 cmake --build "$BUILD" --parallel "$JOBS"
 echo
 echo "Executables in $BUILD:"
-ls "$BUILD" | grep -E '^(nrlauncher|nrengine|nrengine_headless|nrtool|nrtests)(\.exe)?$' || true
+for f in nrlauncher nrengine nrengine_headless nrtool nrtests; do
+    for e in "" .exe; do [ -e "$BUILD/$f$e" ] && echo "  $f$e"; done
+done
 if [ ! -e "$BUILD/nrlauncher" ] && [ ! -e "$BUILD/nrlauncher.exe" ]; then
     echo
     echo "note: SDL2 was not found, so the launcher and the engine window were not built."

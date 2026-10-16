@@ -212,7 +212,7 @@ static void mat_vec(ctx *c, s16 m[3][3], const s16 v[3], const s32 t[3], bool lm
 {
     int i;
     for (i = 0; i < 3; i++) {
-        s64 acc = (s64)t[i] << 12;
+        s64 acc = NR_SHL64(t[i], 12);
         acc = mac_check(c, i + 1, acc + (s64)m[i][0] * v[0]);
         acc = mac_check(c, i + 1, acc + (s64)m[i][1] * v[1]);
         acc = mac_check(c, i + 1, acc + (s64)m[i][2] * v[2]);
@@ -229,7 +229,7 @@ static void interpolate_color(ctx *c, s64 m1, s64 m2, s64 m3)
     in[0] = m1; in[1] = m2; in[2] = m3;
     fc[0] = (s32)g->c[RFC]; fc[1] = (s32)g->c[GFC]; fc[2] = (s32)g->c[BFC];
     for (i = 0; i < 3; i++) {
-        s64 t = ((s64)fc[i] << 12) - in[i];
+        s64 t = NR_SHL64(fc[i], 12) - in[i];
         set_mac(c, i + 1, t, c->sf);
         set_ir(c, i + 1, (s32)g->d[MAC1 + i], false);
     }
@@ -253,7 +253,7 @@ static void rtps(ctx *c, int vi, bool last)
     get_vector(g, vi, v);
     tr[0] = (s32)g->c[TRX]; tr[1] = (s32)g->c[TRY]; tr[2] = (s32)g->c[TRZ];
     for (i = 0; i < 3; i++) {
-        s64 a = (s64)tr[i] << 12;
+        s64 a = NR_SHL64(tr[i], 12);
         a = mac_check(c, i + 1, a + (s64)m[i][0] * v[0]);
         a = mac_check(c, i + 1, a + (s64)m[i][1] * v[1]);
         a = mac_check(c, i + 1, a + (s64)m[i][2] * v[2]);
@@ -324,9 +324,9 @@ static void ncs_core(ctx *c, int vi, int mode /*0 NC,1 NCC,2 NCD*/)
     mat_vec(c, lcm, ir, bk, c->lm);
     if (mode != 0) {
         u32 rgbc = g->d[RGBC];
-        s64 m1 = ((s64)(rgbc & 0xFF) * (s16)g->d[IR1]) << 4;
-        s64 m2 = ((s64)((rgbc >> 8) & 0xFF) * (s16)g->d[IR2]) << 4;
-        s64 m3 = ((s64)((rgbc >> 16) & 0xFF) * (s16)g->d[IR3]) << 4;
+        s64 m1 = NR_SHL64((s64)(rgbc & 0xFF) * (s16)g->d[IR1], 4);
+        s64 m2 = NR_SHL64((s64)((rgbc >> 8) & 0xFF) * (s16)g->d[IR2], 4);
+        s64 m3 = NR_SHL64((s64)((rgbc >> 16) & 0xFF) * (s16)g->d[IR3], 4);
         if (mode == 2) interpolate_color(c, m1, m2, m3);
         else { set_mac_ir(c, 1, m1, c->lm); set_mac_ir(c, 2, m2, c->lm); set_mac_ir(c, 3, m3, c->lm); }
     }
@@ -344,9 +344,9 @@ static void cc_cdp(ctx *c, bool depth)
     ir[0] = (s16)g->d[IR1]; ir[1] = (s16)g->d[IR2]; ir[2] = (s16)g->d[IR3];
     bk[0] = (s32)g->c[RBK]; bk[1] = (s32)g->c[GBK]; bk[2] = (s32)g->c[BBK];
     mat_vec(c, lcm, ir, bk, c->lm);
-    m1 = ((s64)(rgbc & 0xFF) * (s16)g->d[IR1]) << 4;
-    m2 = ((s64)((rgbc >> 8) & 0xFF) * (s16)g->d[IR2]) << 4;
-    m3 = ((s64)((rgbc >> 16) & 0xFF) * (s16)g->d[IR3]) << 4;
+    m1 = NR_SHL64((s64)(rgbc & 0xFF) * (s16)g->d[IR1], 4);
+    m2 = NR_SHL64((s64)((rgbc >> 8) & 0xFF) * (s16)g->d[IR2], 4);
+    m3 = NR_SHL64((s64)((rgbc >> 16) & 0xFF) * (s16)g->d[IR3], 4);
     if (depth) interpolate_color(c, m1, m2, m3);
     else { set_mac_ir(c, 1, m1, c->lm); set_mac_ir(c, 2, m2, c->lm); set_mac_ir(c, 3, m3, c->lm); }
     push_rgb_from_mac(c);
@@ -354,7 +354,7 @@ static void cc_cdp(ctx *c, bool depth)
 
 static void dpcs(ctx *c, u32 rgb)
 {
-    s64 m1 = (s64)(rgb & 0xFF) << 16, m2 = (s64)((rgb >> 8) & 0xFF) << 16, m3 = (s64)((rgb >> 16) & 0xFF) << 16;
+    s64 m1 = NR_SHL64(rgb & 0xFF, 16), m2 = NR_SHL64((rgb >> 8) & 0xFF, 16), m3 = NR_SHL64((rgb >> 16) & 0xFF, 16);
     interpolate_color(c, m1, m2, m3);
     push_rgb_from_mac(c);
 }
@@ -483,7 +483,7 @@ int gte_command(psx_gte *g, u32 cmd)
     }
     case 0x10: dpcs(&c, g->d[RGBC]); cycles = 8; break;
     case 0x11: { /* INTPL */
-        s64 m1 = (s64)(s16)g->d[IR1] << 12, m2 = (s64)(s16)g->d[IR2] << 12, m3 = (s64)(s16)g->d[IR3] << 12;
+        s64 m1 = NR_SHL64((s16)g->d[IR1], 12), m2 = NR_SHL64((s16)g->d[IR2], 12), m3 = NR_SHL64((s16)g->d[IR3], 12);
         interpolate_color(&c, m1, m2, m3);
         push_rgb_from_mac(&c);
         cycles = 8;
@@ -501,7 +501,7 @@ int gte_command(psx_gte *g, u32 cmd)
         if (cv == 2) {
             int i;
             for (i = 0; i < 3; i++) {
-                s64 tmp = mac_check(&c, i + 1, ((s64)t[i] << 12) + (s64)m[i][0] * v[0]);
+                s64 tmp = mac_check(&c, i + 1, NR_SHL64(t[i], 12) + (s64)m[i][0] * v[0]);
                 s64 acc;
                 /* the FC term only affects flags (hardware bug) */
                 {
@@ -536,9 +536,9 @@ int gte_command(psx_gte *g, u32 cmd)
     }
     case 0x29: { /* DCPL */
         u32 rgbc = g->d[RGBC];
-        s64 m1 = ((s64)(rgbc & 0xFF) * (s16)g->d[IR1]) << 4;
-        s64 m2 = ((s64)((rgbc >> 8) & 0xFF) * (s16)g->d[IR2]) << 4;
-        s64 m3 = ((s64)((rgbc >> 16) & 0xFF) * (s16)g->d[IR3]) << 4;
+        s64 m1 = NR_SHL64((s64)(rgbc & 0xFF) * (s16)g->d[IR1], 4);
+        s64 m2 = NR_SHL64((s64)((rgbc >> 8) & 0xFF) * (s16)g->d[IR2], 4);
+        s64 m3 = NR_SHL64((s64)((rgbc >> 16) & 0xFF) * (s16)g->d[IR3], 4);
         interpolate_color(&c, m1, m2, m3);
         push_rgb_from_mac(&c);
         cycles = 8;
@@ -582,7 +582,7 @@ int gte_command(psx_gte *g, u32 cmd)
     }
     case 0x3E: { /* GPL */
         s64 ir0 = (s16)g->d[IR0];
-        s64 m1 = (s64)(s32)g->d[MAC1] << c.sf, m2 = (s64)(s32)g->d[MAC2] << c.sf, m3 = (s64)(s32)g->d[MAC3] << c.sf;
+        s64 m1 = NR_SHL64((s32)g->d[MAC1], c.sf), m2 = NR_SHL64((s32)g->d[MAC2], c.sf), m3 = NR_SHL64((s32)g->d[MAC3], c.sf);
         set_mac_ir(&c, 1, mac_check(&c, 1, m1) + (s64)(s16)g->d[IR1] * ir0, c.lm);
         set_mac_ir(&c, 2, mac_check(&c, 2, m2) + (s64)(s16)g->d[IR2] * ir0, c.lm);
         set_mac_ir(&c, 3, mac_check(&c, 3, m3) + (s64)(s16)g->d[IR3] * ir0, c.lm);

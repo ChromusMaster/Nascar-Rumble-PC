@@ -60,6 +60,29 @@ intended, validated change alters the output, update them with
 Typical time: about 2 s without data; several minutes with data (two
 5 600-frame races, one with enhanced rendering).
 
+## Continuous integration (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on every push and pull request. It only
+validates the code: no package or binary is produced or published, and no game
+data is involved (the disc-based tests above are run locally).
+
+| Job | What it checks |
+|---|---|
+| Linux gcc / clang | full build with warnings as errors (`-Werror`), unit tests |
+| AddressSanitizer + UBSan | unit tests with memory-error, leak and undefined-behaviour detection; the launcher driven through every tab, control and language (`scripts/ci/launcher_ui_test.sh`, scripted clicks under Xvfb) |
+| Windows MinGW-w64 | build with warnings as errors and unit tests (the toolchain of the released binaries) |
+| Windows MSVC | build and unit tests with Visual Studio |
+| cppcheck | static analysis (warnings, performance, portability; `src/third_party` excluded) |
+| CodeQL | GitHub security analysis with the `security-and-quality` queries; results appear in the repository's Security tab |
+| Hygiene | `scripts/check_package.py` (no disc images, game files or binaries committed) and ShellCheck on the scripts |
+
+Compiler errors, sanitizer reports and failed test checks are shown as
+annotations on the commit or pull request (problem matchers in
+`.github/problem-matchers`).
+
+Before a release, also run the sanitizer build against your own disc (a few
+thousand frames with scripted input, see "Diagnostics").
+
 ## Hardware reference vectors (local validation)
 
 The GTE was checked against the 1 150 vectors of the `gte/test-all` program of

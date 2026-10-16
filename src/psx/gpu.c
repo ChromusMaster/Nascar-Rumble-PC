@@ -327,13 +327,13 @@ static void draw_triangle(psx *p, vtx v0, vtx v1, vtx v2, const prim_state *ps)
         s64 rr = 0, gg = 0, bb = 0, uu = 0, vv = 0;
         s32 dx0 = minx - v0.x, dy0 = y - v0.y;
         if (ps->gouraud) {
-            rr = ((s64)v0.r << 16) + dr_dx * dx0 + dr_dy * dy0 + 0x8000;
-            gg = ((s64)v0.g << 16) + dg_dx * dx0 + dg_dy * dy0 + 0x8000;
-            bb = ((s64)v0.b << 16) + db_dx * dx0 + db_dy * dy0 + 0x8000;
+            rr = NR_SHL64(v0.r, 16) + dr_dx * dx0 + dr_dy * dy0 + 0x8000;
+            gg = NR_SHL64(v0.g, 16) + dg_dx * dx0 + dg_dy * dy0 + 0x8000;
+            bb = NR_SHL64(v0.b, 16) + db_dx * dx0 + db_dy * dy0 + 0x8000;
         }
         if (ps->textured) {
-            uu = ((s64)v0.u << 16) + du_dx * dx0 + du_dy * dy0 + 0x8000;
-            vv = ((s64)v0.v << 16) + dv_dx * dx0 + dv_dy * dy0 + 0x8000;
+            uu = NR_SHL64(v0.u, 16) + du_dx * dx0 + du_dy * dy0 + 0x8000;
+            vv = NR_SHL64(v0.v, 16) + dv_dx * dx0 + dv_dy * dy0 + 0x8000;
         }
         for (x = minx; x <= maxx; x++) {
             if ((w0 | w1 | w2) >= 0) {
@@ -525,11 +525,11 @@ static void draw_line(psx *p, vtx a, vtx b, bool gouraud, bool semi)
         nr_rcmd *c = rec_begin(g, R_LINE, &ps, (u16)((semi ? RF_SEMI : 0) | (gouraud ? RF_GOURAUD : 0) | (((g->texpage >> 9) & 1) ? RF_DITHER : 0)));
         if (c) { rec_vtx(g, &c->v[0], &a); rec_vtx(g, &c->v[1], &b); c->v[0].fw = c->v[1].fw = 1.0f; }
     }
-    x = ((s64)a.x << 16) + 0x8000; y = ((s64)a.y << 16) + 0x8000;
-    r = (s64)a.r << 16; gg = (s64)a.g << 16; bl = (s64)a.b << 16;
+    x = NR_SHL64(a.x, 16) + 0x8000; y = NR_SHL64(a.y, 16) + 0x8000;
+    r = NR_SHL64(a.r, 16); gg = NR_SHL64(a.g, 16); bl = NR_SHL64(a.b, 16);
     if (steps) {
-        sx = ((s64)dx << 16) / steps; sy = ((s64)dy << 16) / steps;
-        sr = ((s64)(b.r - a.r) << 16) / steps; sg = ((s64)(b.g - a.g) << 16) / steps; sb = ((s64)(b.b - a.b) << 16) / steps;
+        sx = NR_SHL64(dx, 16) / steps; sy = NR_SHL64(dy, 16) / steps;
+        sr = NR_SHL64(b.r - a.r, 16) / steps; sg = NR_SHL64(b.g - a.g, 16) / steps; sb = NR_SHL64(b.b - a.b, 16) / steps;
     } else { sx = sy = sr = sg = sb = 0; }
     for (i = 0; i <= steps; i++) {
         s32 px = (s32)(x >> 16), py = (s32)(y >> 16);

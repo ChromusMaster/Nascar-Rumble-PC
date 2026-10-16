@@ -1,0 +1,207 @@
+# Continuous integration: builds and tests every push and pull request for
+# code quality and security. It only validates the code; it never builds or
+# publishes packages, and no game data is used (the disc-based tests are run
+# locally by the developers with their own copy, see docs/TESTS.md).
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Linux: GCC and Clang, warnings are errors, unit tests.
+  linux:
+    name: Linux ${{ matrix.cc }} (warnings as errors, unit tests)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report compiler and test messages as annotations
+        run: |
+          echo "::add-matcher::.github/problem-matchers/gcc.json"
+          echo "::add-matcher::.github/problem-matchers/nrtests.json"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev clang
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=${{ matrix.cc }}
+          -DCMAKE_C_FLAGS="-Werror"
+      - name: Build
+        run: cmake --build build
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Memory safety and undefined behaviour: AddressSanitizer + UBSan (incl.
+  # leak detection for the tests) and a scripted run through every launcher
+  # tab, control and language.
+  sanitizers:
+    name: Linux AddressSanitizer + UBSan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report compiler, sanitizer and test messages as annotations
+        run: |
+          echo "::add-matcher::.github/problem-matchers/gcc.json"
+          echo "::add-matcher::.github/problem-matchers/nrtests.json"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev xvfb fonts-dejavu-core fonts-noto-cjk fontconfig
+      - name: Configure
+        run: >
+          cmake -S . -B build-san -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build
+        run: cmake --build build-san
+      - name: Unit tests under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          cd build-san
+          ./nrtests
+      - name: Launcher UI test under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: xvfb-run -a -s "-screen 0 1280x960x24" scripts/ci/launcher_ui_test.sh build-san
+
+  # ---------------------------------------------------------------------------
+  # Windows: MinGW-w64 (the toolchain of the released binaries) and MSVC.
+  windows-mingw:
+    name: Windows MinGW-w64 (warnings as errors, unit tests)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-SDL2
+      - name: Report compiler and test messages as annotations
+        run: |
+          echo "::add-matcher::.github/problem-matchers/gcc.json"
+          echo "::add-matcher::.github/problem-matchers/nrtests.json"
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS="-Werror"
+      - name: Build
+        run: cmake --build build
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+  windows-msvc:
+    name: Windows MSVC (unit tests)
+    runs-on: windows-latest
+    env:
+      SDL2_VERSION: 2.30.9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report compiler and test messages as annotations
+        shell: bash
+        run: |
+          echo "::add-matcher::.github/problem-matchers/msvc.json"
+          echo "::add-matcher::.github/problem-matchers/nrtests.json"
+      - name: Download SDL2 development package (official release)
+        shell: pwsh
+        run: |
+          $zip = "SDL2-devel-$env:SDL2_VERSION-VC.zip"
+          Invoke-WebRequest "https://github.com/libsdl-org/SDL/releases/download/release-$env:SDL2_VERSION/$zip" -OutFile $zip
+          Expand-Archive $zip -DestinationPath "$env:RUNNER_TEMP"
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -A x64 -DSDL2_DIR="$env:RUNNER_TEMP/SDL2-$env:SDL2_VERSION/cmake"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Static analysis: cppcheck (bugs, undefined behaviour, portability).
+  cppcheck:
+    name: Static analysis (cppcheck)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cppcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cppcheck
+      - name: Run cppcheck
+        run: >
+          echo "::add-matcher::.github/problem-matchers/gcc.json" &&
+          cppcheck --std=c99 --template=gcc --enable=warning,performance,portability
+          --inline-suppr --error-exitcode=1 --quiet
+          -I src -i src/third_party
+          --suppress=missingIncludeSystem
+          -D__linux__ -DNR_VERSION_STRING=\"ci\"
+          src tests
+
+  # ---------------------------------------------------------------------------
+  # Security analysis: GitHub CodeQL with the security-and-quality queries.
+  codeql:
+    name: Security analysis (CodeQL)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-and-quality
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:c-cpp
+
+  # ---------------------------------------------------------------------------
+  # Repository hygiene: no game data or binaries may ever be committed, shell
+  # scripts are checked with ShellCheck.
+  hygiene:
+    name: No game data / script checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: No game data, disc images or binaries in the repository
+        run: python3 scripts/check_package.py .
+      - name: ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+          shellcheck -S warning scripts/*.sh scripts/ci/*.sh packaging/debian/postinst

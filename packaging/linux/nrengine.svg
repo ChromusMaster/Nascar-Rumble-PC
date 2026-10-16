@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- NR Engine icon: original artwork made for this project (CC0). -->
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#1d2633"/>
+  <g fill="#e8edf3">
+    <rect x="8" y="44" width="6" height="6"/><rect x="20" y="44" width="6" height="6"/>
+    <rect x="32" y="44" width="6" height="6"/><rect x="44" y="44" width="6" height="6"/>
+    <rect x="14" y="50" width="6" height="6"/><rect x="26" y="50" width="6" height="6"/>
+    <rect x="38" y="50" width="6" height="6"/><rect x="50" y="50" width="6" height="6"/>
+  </g>
+  <text x="32" y="36" font-family="DejaVu Sans, Arial, sans-serif" font-size="26" font-weight="bold"
+        text-anchor="middle" fill="#f2b632">NR</text>
+</svg>

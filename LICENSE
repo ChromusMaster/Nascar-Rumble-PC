@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 ChromusMaster
+Copyright (c) 2026 NASCAR Rumble Reimplementation Engine contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +19,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+This license covers only the source code and documentation of this project.
+It grants no rights to NASCAR Rumble or any other third-party game data,
+which are never included and must be supplied by the user from their own copy.

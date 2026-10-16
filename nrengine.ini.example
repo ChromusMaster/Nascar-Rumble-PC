@@ -1,0 +1,139 @@
+; NR Engine (NASCAR Rumble Reimplementation Engine) configuration.
+;
+; The launcher (nrlauncher) writes this file when you press "Save" or "Play!",
+; keeping comments and keys it does not know. You normally never edit it by
+; hand. Location: next to the executables (portable mode), ~/.config/nrengine/
+; (Linux, installed) or %APPDATA%\NREngine (Windows, installed). See
+; docs/CONFIG.md for every key.
+
+[game]
+; --- Disc selection (as in the Silent Hill PC port) ---
+; No game file ships with the engine. The image is looked for in this order:
+;   1. disc = full path (chosen with "Browse..." in the launcher);
+;   2. disc_image = name of a file inside the gamedata/ folder;
+;   3. "NASCAR Rumble (USA).cue/.bin" inside gamedata/;
+;   4. any .cue/.bin/.iso/.img in gamedata/ that is NASCAR Rumble (USA)
+;      (detected by content; the file name does not matter).
+; disc = C:\Games\PS1\NASCAR Rumble (USA).cue
+; disc_image = NASCAR Rumble (USA).cue
+; gamedata = D:\PS1\gamedata        ; another gamedata folder
+;
+; Game language: a folder in mods/Language (empty = original texts).
+; See docs/MODS.md.
+; language = example-pt-BR
+;
+; 1 = check the CRC32 of every disc file at start (slower start)
+verify = 0
+
+[mods]
+; Other folders of mods/ (comma separated). Prepared infrastructure;
+; car/track formats are not documented yet.
+; load = Cars/my-paint
+
+[memcard]
+; Memory card images (128 KB, raw .mcd/.mcr format).
+; They are created and formatted automatically when missing.
+slot1 = memcard1.mcd
+; slot2 = memcard2.mcd
+
+[video]
+; auto | opengl | d3d12 | d3d11 | d3d10 | d3d9 | software
+;   auto = Windows: d3d11 > opengl > d3d10 > d3d9 > software
+;          Linux:   opengl > software
+renderer = auto
+; initial window size (320x240 x N)
+scale = 3
+fullscreen = 0
+vsync = 1
+; original | 20 | 30 | 60   (20/30 limit what is shown; 60 unlocks and changes the pace)
+fps = original
+; 1 = show the frame-rate counter
+show_fps = 0
+; --- Picture enhancements (do not change what the game computes; see docs/GRAPHICS.md) ---
+; internal resolution 1..8 (x 320x240)
+internal_resolution = 1
+; supersampling: 1 (off), 2, 4, 8, 16
+antialiasing = 1
+; 1 = 24-bit colour for shading/blending (0 = the console's 15-bit)
+true_color = 0
+; the console's 4x4 dithering
+dithering = 1
+; 0 none (console) | 1 bilinear on 3D | 2 bilinear on everything
+texture_filter = 0
+; integer | nearest | bilinear | sharp
+scaling = bilinear
+; 4:3 | stretch | 16:9
+aspect = 4:3
+; off | crt | scanlines | vignette | colorgrade | grain | sharpen | cinematic
+post_fx = off
+post_fx_strength = 1.00
+; off | reinhard | aces | filmic
+tonemap = off
+brightness = 0.00
+contrast = 1.00
+saturation = 1.00
+gamma = 1.00
+; experimental
+pgxp = 0
+widescreen = 0
+
+[input]
+; Player 1 keys: SDL2 key names (https://wiki.libsdl.org/SDL2/SDL_Scancode).
+up = Up
+down = Down
+left = Left
+right = Right
+cross = Z
+circle = X
+square = A
+triangle = S
+l1 = Q
+r1 = W
+l2 = E
+r2 = R
+start = Return
+select = Space
+; 1 = a controller is plugged into port 2 (two players)
+port2 = 0
+
+[input2]
+; Player 2 keys (none by default), same names as [input].
+; cross = Keypad 2
+
+[pad1]
+; Controller of player 1: auto | none | sdl:<GUID>@n | hid:<vid>:<pid>@n
+; (choose it in the launcher's Controls tab; see docs/CONTROLLERS.md)
+device = auto
+; 1 = the left analog stick also moves the D-pad
+left_stick_dpad = 1
+; Bindings (empty = default layout): a, b, x, y, dpup, leftshoulder,
+; lefttrigger, ... (mapped controllers) or b3, a1-, h0.up (raw)
+; cross = a
+
+[pad2]
+device = auto
+left_stick_dpad = 1
+
+[engine]
+; 1 = native C routines (verified against the original); 0 = original code only
+native_overrides = 1
+; 1 = GPU drawing-time model (console pace); 0 = instant GPU (diagnostics)
+gpu_timing_model = 1
+; emulated CPU multiplier: 0 = automatic (1, or 3-4 in the 60 fps mode)
+cpu_overclock = 0
+; physics step: auto | original | 30 | 60
+;   auto = steady 30 Hz (60 Hz in the 60 fps mode); original = console behaviour
+;   (variable step: handling and collisions change with the frame rate)
+physics_step = auto
+; software renderer threads (0 = automatic)
+threads = 0
+
+[debug]
+; 0 error | 1 warning | 2 info | 3 debug | 4 trace
+log_level = 2
+
+[launcher]
+; launcher language: en-US (default), en-GB, en-CA, pt-BR, pt-PT, es-ES,
+; es-MX, es-419, es-AR, es-US, zh-Hans-CN, zh-Hans-SG, zh-Hant-TW,
+; zh-Hant-HK, zh-Hant-MO, ja-JP, ko-KR
+language = en-US

@@ -1,0 +1,38 @@
+# Example language pack (Brazilian Portuguese) - ONLY A TEMPLATE.
+#
+# This file holds only translations written for this project; no original
+# game text is distributed. To translate the whole game, create the full
+# template from YOUR copy:
+#
+#     nrtool export-text "NASCAR Rumble (USA).cue" text.txt
+#
+# and replace the texts with translated ones. To use this example choose
+# "example-pt-BR" as the game language in the launcher (General tab), or set
+# in nrengine.ini:
+#
+#     [game]
+#     language = example-pt-BR
+#
+# or run nrengine_headless with --language example-pt-BR.
+# Full format in docs/MODS.md.
+
+[options]
+# accents = ascii  -> accented letters become ASCII (default; the game font
+#                     only has ASCII characters)
+# accents = keep   -> keep the Latin-1 bytes (useful only with a font that has them)
+accents = ascii
+
+[fe]
+100 = 1 Jogador
+101 = Selecione para o modo de 1 jogador.
+110 = 2 Jogadores
+111 = Selecione para jogar com 2 jogadores.
+120 = Categoria
+150 = Opções do Jogo
+200 = Corrida Simples
+210 = Campeonato
+
+# [exe]
+# Messages built into the executable, in the format:
+#   "original text exactly as it appears in the template" = "translation"
+# The translation must fit the space of the original (the excess is cut).

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=NR Engine
+GenericName=Game engine for NASCAR Rumble (your own disc)
+Comment=Reimplementation engine for the PlayStation game NASCAR Rumble. Requires your own copy of the game.
+Exec=nrlauncher
+Icon=nrengine
+Terminal=false
+Categories=Game;Emulator;
+Keywords=nascar;rumble;racing;playstation;

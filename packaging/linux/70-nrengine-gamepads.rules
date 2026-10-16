@@ -1,0 +1,44 @@
+# NR Engine - access to generic USB game controllers through hidraw.
+#
+# The engine reads controllers through SDL2 (operating-system driver) and,
+# optionally, directly through the Linux hidraw interface. Reading hidraw
+# needs read permission on /dev/hidrawN. These rules grant it to the user
+# logged in at the local seat (systemd-logind "uaccess" tag), only for
+# devices from vendors that make game controllers or USB pad adapters.
+# Keyboards, mice and security keys are NOT matched.
+#
+# Installed by the .deb package as /usr/lib/udev/rules.d/70-nrengine-gamepads.rules
+# Manual install: sudo cp 70-nrengine-gamepads.rules /etc/udev/rules.d/ &&
+#                 sudo udevadm control --reload && sudo udevadm trigger
+
+# DragonRise Inc. ("Generic USB Joystick", "PC TWIN SHOCK", many clones)
+KERNEL=="hidraw*", ATTRS{idVendor}=="0079", TAG+="uaccess"
+# Personal Communication Systems / "Twin USB Joystick" PlayStation-to-USB adapters
+KERNEL=="hidraw*", ATTRS{idVendor}=="0810", TAG+="uaccess"
+# GreenAsia / Mayflash / "MaxFire" adapters and pads
+KERNEL=="hidraw*", ATTRS{idVendor}=="0e8f", TAG+="uaccess"
+# Padix / Rockfire (common SNES-style USB pads, e.g. 0583:2060)
+KERNEL=="hidraw*", ATTRS{idVendor}=="0583", TAG+="uaccess"
+# Logitech gamepads only (Dual Action, RumblePad 2, F310/F510/F710 DInput mode)
+KERNEL=="hidraw*", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c216", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c218", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="046d", ATTRS{idProduct}=="c219", TAG+="uaccess"
+# Generic "USB Gamepad" chips (12bd, 2563/ShanWan, 2dc8/8BitDo, 20d6/PowerA)
+KERNEL=="hidraw*", ATTRS{idVendor}=="12bd", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="2563", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="2dc8", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="20d6", TAG+="uaccess"
+# Sony (DualShock 3/4, DualSense) and Nintendo (Switch Pro, SNES/N64 online pads)
+KERNEL=="hidraw*", ATTRS{idVendor}=="054c", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="057e", TAG+="uaccess"
+# HORI, Mad Catz, Thrustmaster, Saitek, PDP, Hyperkin pads
+KERNEL=="hidraw*", ATTRS{idVendor}=="0f0d", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0738", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="044f", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="06a3", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="0e6f", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="2e24", TAG+="uaccess"
+# Betop / generic Chinese pads
+KERNEL=="hidraw*", ATTRS{idVendor}=="11c0", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="11c1", TAG+="uaccess"
+KERNEL=="hidraw*", ATTRS{idVendor}=="1a34", TAG+="uaccess"

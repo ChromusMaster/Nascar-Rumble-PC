@@ -18,7 +18,7 @@ image of 111 075 sectors, executable SHA-1
 | Title, main menu, mode/car/track selection, loading screens (LSC) | screenshots; scripted input of the tests |
 | Race: countdown, 3D, AI cars, HUD, minimap, speedometer | screenshots at frame 5 600 (lap 1/4, position 6/6, accelerator pressed) |
 | Audio | SPU output (music, effects) recorded to WAV and checked by amplitude; **not** compared with a hardware recording |
-| Memory card | automatic creation and formatting of the `.mcd` image; HLE kernel file operations. Saving/loading from the game's menus was **not** exercised systematically |
+| Memory card | automatic creation and formatting of the `.mcd` image; Game Options > Load and Save: "Save Not Found" on an empty card, "Saved Successfully", the directory entry `BASLUS-01068NASCRMBL` written to the image, "Save Found" and "Loaded Successfully" in a new session (0.3.2; automated test for the save) |
 | Native BS decoder | 498/498 calls bit-exact over the logos and intro (`--verify-natives`), see [NATIVE.md](NATIVE.md) |
 | Determinism | two identical runs produce the same VRAM (automated test) |
 | Unimplemented features | none triggered in 6 000 frames from boot to the race (`nr_unimplemented` report) |
@@ -107,7 +107,7 @@ Each item may produce behaviour different from the real hardware.
 | D6 | Timers | the 1–2-cycle hold at 0000h after reset/overflow is not modelled; timer 0 HBlank sync approximated per line | deviations of a few cycles |
 | D7 | CD-ROM | estimated seek times; no CD-DA and XA-ADPCM (the disc uses neither; such commands are logged as "not implemented") | approximate loading times |
 | D8 | HLE kernel | reimplemented from documentation; the original BIOS `SysDeqIntRP` bug is not reproduced; minimal `DefInt`/threads semantics | only affects software relying on these details (not seen in this game) |
-| D9 | Memory card | served at file level by the HLE kernel; on the SIO bus the card answers "not connected" | games accessing the card directly would fail (this one uses the BIOS) |
+| D9 | Memory card | served at sector level by the HLE kernel with the retail event sequence, one sector per video field; on the SIO bus the card answers "not connected" | card access is faster than on the console; games accessing the card directly would fail (this one uses the BIOS) |
 | D10 | Controller | digital pad only; no DualShock analog/vibration; the 2-player path was **not** validated | — |
 | D11 | Natives | native BS decoder time modelled linearly (+0.3 % aggregate; individual calls vary) | slightly different video decoding pace |
 | D12 | MDEC/DMA | data transferred at once; completion delayed by a model | — |
@@ -126,6 +126,21 @@ Each item may produce behaviour different from the real hardware.
 
 ### Emulation fixes recorded
 
+- *Memory card not detected (0.3.2)*: the game reported "No MEMORY CARD"
+  even with a card image. Its card driver relies on the retail BIOS event
+  sequence: `_card_load` reads 16 directory sectors and produces a HwCARD
+  event for each one, the high-level SwCARD event comes before the HwCARD
+  event of the last step, `_card_info` produces both, and calls made while
+  the port is busy return 0. After starting a read the game ignores the first
+  HwCARD event (the stale one from `_card_load`). The HLE kernel delivered a
+  single event per operation, so the game kept retrying. The sequence now
+  follows the BIOS behaviour documented by the OpenBIOS reimplementation
+  (PCSX-Redux).
+- *Seam in full-screen backgrounds above 1x (0.3.2)*: two 160-pixel textured
+  polygons form the menu background; at high resolution the samples just left
+  of x = 160 read texel 160 (outside the picture), giving a black or coloured
+  line. Texture coordinates are now clamped to the last texel the console
+  draws (`max - 1`) in the software, OpenGL and Direct3D renderers above 1x.
 - *Launcher drop-down crash (0.3.1)*: opening any drop-down list closed the
   launcher on Windows. The open list drew item texts through pointers into the
   stack of the tab function that had already returned; the texts are now

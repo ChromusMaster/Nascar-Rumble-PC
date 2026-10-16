@@ -53,3 +53,20 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# NR Engine build output
+build/
+build-*/
+dist/
+
+# Never commit game data or user files
+gamedata/
+*.cue
+*.bin
+*.iso
+*.mcd
+*.mcr
+*.nrs
+nrengine.ini
+nrengine.log
+screenshots/

@@ -87,7 +87,7 @@ static const char k_glsl_fs_common[] =
 "  if (textured) {\n"
 "    vec4 t;\n"
 "    if (filt) { if (!bilinear(v_uv, sprite, t)) discard; }\n"
-"    else { if (!texel(ivec2(floor(v_uv + (sprite ? 0.0 : 0.5))), t)) discard; }\n"
+"    else { if (!texel(clamp(ivec2(floor(v_uv + (sprite ? 0.0 : 0.5))), ivec2(v_rc.xy), ivec2(v_rc.zw)), t)) discard; }\n"
 "    stp = t.a > 0.5 ? 1.0 : 0.0;\n"
 "    if (g_pass.y > 0.5) c = raw ? t.rgb : t.rgb * v_col.rgb / 128.0;\n"
 "    else { vec3 t8 = floor(floor(t.rgb * 255.0 + 0.5) / 8.0) * 8.0; c = raw ? t8 : floor(t8 * v_col.rgb / 128.0); }\n"

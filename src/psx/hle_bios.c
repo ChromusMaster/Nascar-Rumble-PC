@@ -72,6 +72,7 @@ typedef struct {
     u32 sector;
     u32 addr;
     int delay;      /* vblanks to wait */
+    int step;       /* _card_load: next directory sector (0..15) */
 } card_op;
 
 struct psx_hle {
@@ -422,6 +423,7 @@ void hle_set_memcard(psx *p, int slot, const char *path)
         h->memcard_dirty[slot] = true;
     }
     h->card_new[slot] = true;
+    h->card_status[slot] = 0x01;
 }
 
 void hle_flush_memcards(psx *p)
@@ -436,61 +438,115 @@ void hle_flush_memcards(psx *p)
     }
 }
 
-static void card_queue(psx *p, int kind, u32 port, u32 sector, u32 addr)
+/* Returns false (the BIOS call returns 0) while the port is still busy with
+ * a previous operation, as the retail BIOS does. */
+static bool card_queue(psx *p, int kind, u32 port, u32 sector, u32 addr)
 {
     psx_hle *h = p->hle;
     card_op *o;
-    if (h->card_qn >= 8) { NR_WARN("card", "operation queue full"); return; }
+    int i;
+    for (i = 0; i < h->card_qn; i++)
+        if (h->card_q[i].port == (int)((port >> 4) & 1)) { NR_DBG("card", "port %02X busy", port); return false; }
+    if (h->card_qn >= 8) { NR_WARN("card", "operation queue full"); return false; }
     o = &h->card_q[h->card_qn++];
     NR_DBG("card", "%s port %02X sector %u buffer %08X", kind == 1 ? "read" : kind == 2 ? "write" : kind == 3 ? "info" : "load", port, sector, addr);
+    memset(o, 0, sizeof(*o));
     o->kind = kind;
     o->port = (port >> 4) & 1;
     o->sector = sector;
     o->addr = addr;
     o->delay = 1;
-    h->card_status[o->port] = kind == 1 ? 0x02 : kind == 2 ? 0x04 : 0x08;
+    h->card_status[o->port] = 0;      /* operation in progress */
+    return true;
+}
+
+/* Memory card operations, following the event sequence of the retail BIOS
+ * (as documented by the OpenBIOS reimplementation in PCSX-Redux):
+ *
+ * - every low-level sector access (B(4Eh) _card_write, B(4Fh) _card_read and
+ *   each sector read inside A(ACh) _card_load) ends with HwCARD
+ *   (F0000011h) EvSpIOE (0004h), or EvSpERROR (8000h), EvSpTIMOUT (0100h)
+ *   for no card, EvSpNEW (2000h) when the card reports "new card" and the
+ *   game did not call B(50h) _new_card;
+ * - the high-level calls A(ABh) _card_info and A(ACh) _card_load also end
+ *   with SwCARD (F4000001h), delivered BEFORE the HwCARD event of their last
+ *   low-level step;
+ * - _card_load reads the 16 directory sectors one by one, so the game also
+ *   sees 15 HwCARD EvSpIOE events before the final pair.
+ *
+ * NASCAR Rumble's card driver depends on this order: after starting a read
+ * it ignores the first HwCARD event (the one that belongs to the end of the
+ * previous _card_load) and only accepts the second. With a single event per
+ * operation the game kept retrying and reported "No MEMORY CARD". */
+static void card_finish(psx *p, card_op *o, bool bu, u32 spec)
+{
+    psx_hle *h = p->hle;
+    h->card_status[o->port] = spec == 0x0004 || spec == 0x2000 ? 0x01 : spec == 0x0100 ? 0x11 : 0x21;
+    if (bu) deliver_event(p, 0xF4000001u, spec);
+    deliver_event(p, 0xF0000011u, spec);
 }
 
 static void card_process(psx *p)
 {
     psx_hle *h = p->hle;
-    card_op o;
-    u32 cls_hw = 0xF0000011u, cls_sw = 0xF4000001u;
+    card_op cur, *o = &cur;
+    bool bu;
+    u8 *m;
     if (!h->card_qn) return;
     if (--h->card_q[0].delay > 0) return;
-    o = h->card_q[0];
+    /* take the operation off the queue before delivering its events: the
+     * game's event handlers start the next operation from inside them */
+    cur = h->card_q[0];
     memmove(&h->card_q[0], &h->card_q[1], sizeof(card_op) * (size_t)(h->card_qn - 1));
     h->card_qn--;
-    if (!h->memcard[o.port]) {
-        h->card_status[o.port] = 0x11;
-        deliver_event(p, (o.kind <= 2) ? cls_hw : cls_sw, 0x0100);
-        return;
-    }
-    switch (o.kind) {
-    case 1: case 2:
-        if (o.sector >= 1024) { h->card_status[o.port] = 0x21; deliver_event(p, cls_hw, 0x8000); return; }
-        if (o.kind == 1) {
-            u32 i;
-            for (i = 0; i < 128; i++) psx_ram_w8(p, o.addr + i, h->memcard[o.port][o.sector * 128 + i]);
-        } else {
-            u32 i;
-            for (i = 0; i < 128; i++) h->memcard[o.port][o.sector * 128 + i] = psx_ram_r8(p, o.addr + i);
-            h->memcard_dirty[o.port] = true;
-            h->card_new[o.port] = false;
+    bu = o->kind == 3 || o->kind == 4;
+    m = h->memcard[o->port];
+    if (!m) {
+        card_finish(p, o, bu, 0x0100);                       /* no card: timeout */
+    } else if (h->card_new[o->port]) {
+        card_finish(p, o, bu, 0x2000);                       /* "new card" until _new_card or a write */
+    } else {
+        switch (o->kind) {
+        case 1: case 2:
+            if (o->sector >= 1024) { card_finish(p, o, false, 0x8000); break; }
+            if (o->kind == 1) {
+                u32 i;
+                for (i = 0; i < 128; i++) psx_ram_w8(p, o->addr + i, m[o->sector * 128 + i]);
+            } else {
+                u32 i;
+                for (i = 0; i < 128; i++) m[o->sector * 128 + i] = psx_ram_r8(p, o->addr + i);
+                h->memcard_dirty[o->port] = true;
+            }
+            card_finish(p, o, false, 0x0004);
+            break;
+        case 3:
+            card_finish(p, o, true, 0x0004);
+            break;
+        case 4:
+            if (o->step == 0 && (m[0] != 'M' || m[1] != 'C')) {   /* unformatted card */
+                h->card_status[o->port] = 0x01;
+                deliver_event(p, 0xF4000001u, 0x2000);
+                deliver_event(p, 0xF0000011u, 0x0004);
+                break;
+            }
+            if (o->step < 15) {                                   /* one directory sector per step */
+                /* the BIOS starts the next sector before delivering the
+                 * HwCARD event of this one, so the port stays busy */
+                o->step++;
+                o->delay = 1;
+                if (h->card_qn < 8) {
+                    memmove(&h->card_q[1], &h->card_q[0], sizeof(card_op) * (size_t)h->card_qn);
+                    h->card_q[0] = cur;
+                    h->card_qn++;
+                }
+                h->card_status[o->port] = 0;
+                deliver_event(p, 0xF0000011u, 0x0004);
+                break;
+            }
+            card_finish(p, o, true, 0x0004);
+            break;
+        default: break;
         }
-        h->card_status[o.port] = 0x01;
-        deliver_event(p, cls_hw, 0x0004);
-        break;
-    case 3: case 4:
-        h->card_status[o.port] = 0x01;
-        if (h->card_new[o.port]) {
-            h->card_new[o.port] = false;
-            deliver_event(p, cls_sw, 0x2000);
-        } else {
-            deliver_event(p, cls_sw, 0x0004);
-        }
-        break;
-    default: break;
     }
 }
 
@@ -731,8 +787,8 @@ static void fn_a(psx *p, u32 n)
     case 0x49: gpu_write_gp0(p, a0); ret(p, 0); break;
     case 0x70: ret(p, 0); break; /* _bu_init */
     case 0x72: ret(p, 0); break; /* _96_remove: the HLE kernel never installs the CD handlers */
-    case 0xAB: card_queue(p, 3, a0, 0, 0); ret(p, 1); break;
-    case 0xAC: card_queue(p, 4, a0, 0, 0); ret(p, 1); break;
+    case 0xAB: ret(p, card_queue(p, 3, a0, 0, 0) ? 1 : 0); break;
+    case 0xAC: ret(p, card_queue(p, 4, a0, 0, 0) ? 1 : 0); break;
     case 0xAD: h->card_auto = a0 != 0; ret(p, 0); break;
     default: unimpl(p, 'A', n); break;
     }
@@ -828,9 +884,9 @@ static void fn_b(psx *p, u32 n)
         ret(p, 0);
         break;
     case 0x4C: ret(p, 0); break; /* StopCARD2 */
-    case 0x4E: if (a1 > 0x400) { ret(p, 0); break; } card_queue(p, 2, a0, a1, a2); ret(p, 1); break;
-    case 0x4F: if (a1 > 0x400) { ret(p, 0); break; } card_queue(p, 1, a0, a1, a2); ret(p, 1); break;
-    case 0x50: { int s; for (s = 0; s < 2; s++) h->card_new[s] = false; ret(p, 0); break; }
+    case 0x4E: if (a1 > 0x400) { ret(p, 0); break; } ret(p, card_queue(p, 2, a0, a1, a2) ? 1 : 0); break;
+    case 0x4F: if (a1 > 0x400) { ret(p, 0); break; } ret(p, card_queue(p, 1, a0, a1, a2) ? 1 : 0); break;
+    case 0x50: { int s; for (s = 0; s < 2; s++) h->card_new[s] = false; ret(p, 0); break; }  /* _new_card: accept the inserted card */
     case 0x56: ret(p, 0x80000000u | K_CTAB); break;
     case 0x57: ret(p, 0x80000000u | K_BTAB); break;
     case 0x5B: { u32 old = h->clear_pad; h->clear_pad = a0 != 0; ret(p, old); break; }
@@ -913,7 +969,9 @@ void hle_trap(psx *p, u32 id)
 bool hle_init(psx *p)
 {
     p->hle = (psx_hle *)calloc(1, sizeof(psx_hle));
-    return p->hle != NULL;
+    if (!p->hle) return false;
+    p->hle->card_status[0] = p->hle->card_status[1] = 0x01;   /* idle */
+    return true;
 }
 
 void hle_free(psx *p)

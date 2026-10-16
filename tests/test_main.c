@@ -785,6 +785,7 @@ static const char *k_race_script =
     "4090 cross\n4098 none\n4210 cross\n4218 none\n4330 cross\n4338 none\n4450 cross\n4458 none\n4700 cross\n";
 
 static const nr_gfx_settings *g_test_gfx;   /* enhanced rendering for the next run (NULL = console) */
+static const char *g_test_memcard;          /* memory card for the next run (NULL = none) */
 
 static bool start_game(nr_app *a, const char *path, const char *script, bool verify)
 {
@@ -795,6 +796,7 @@ static bool start_game(nr_app *a, const char *path, const char *script, bool ver
     a->opt.headless = true;
     a->opt.log_level = NR_LOG_ERROR;
     a->opt.memcard_path[0][0] = 0;   /* no memory card: deterministic */
+    if (g_test_memcard) nr_strlcpy(a->opt.memcard_path[0], g_test_memcard, sizeof(a->opt.memcard_path[0]));
     a->opt.verify_natives = verify;
     if (script) nr_strlcpy(a->opt.input_script, script, sizeof(a->opt.input_script));
     if (g_test_gfx) a->opt.gfx = *g_test_gfx;
@@ -873,6 +875,34 @@ static void test_data(bool update_golden)
             if (!v.p->ovr[k].observe_only) CHECK(v.p->ovr[k].verified_ok > 0);
         }
         nr_app_shutdown(&v);
+    }
+
+    /* memory card: Game Options > Load and Save > Save on a new card, then
+     * check the directory entry written to the card image (the game first
+     * reports "Save Not Found", saves, and the file holds the EA save). */
+    {
+        static const char k_save_script[] =
+            "3610 cross\n3618 none\n3660 triangle\n3668 none\n3700 down\n3706 none\n3720 down\n3726 none\n"
+            "3740 down\n3746 none\n3760 down\n3766 none\n3780 down\n3786 none\n3810 cross\n3818 none\n"
+            "3840 down\n3846 none\n3860 down\n3866 none\n3890 cross\n3898 none\n3955 up\n3961 none\n"
+            "3975 cross\n3983 none\n";
+        u8 *mc = NULL;
+        long n;
+        remove("nrtest_card.mcd");
+        nr_write_file("nrtest_save.txt", k_save_script, strlen(k_save_script));
+        g_test_memcard = "nrtest_card.mcd";
+        run_to(path, "nrtest_save.txt", 4300, false, NULL);
+        g_test_memcard = NULL;
+        n = nr_read_file("nrtest_card.mcd", &mc);
+        CHECK_EQ(n, 128 * 1024);
+        if (n == 128 * 1024) {
+            CHECK(mc[0] == 'M' && mc[1] == 'C');
+            CHECK_EQ(mc[128], 0x51);                                   /* first block in use */
+            CHECK(memcmp(mc + 128 + 10, "BASLUS-01068", 12) == 0);     /* the game's save file */
+        }
+        free(mc);
+        remove("nrtest_card.mcd");
+        remove("nrtest_save.txt");
     }
 
     /* scripted race (menus, loading, 3D race) */

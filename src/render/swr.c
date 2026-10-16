@@ -147,6 +147,18 @@ static inline bool texel(const nr_swr *r, const nr_rcmd *c, s32 u, s32 v, u32 *o
 
 static inline s32 clampi(s32 v, s32 lo, s32 hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+/* Upper texel bound used when sampling. Above 1x a polygon also covers the
+ * fractional area next to its right/bottom edges, which the console never
+ * draws, where the interpolated coordinate reaches the vertex maximum (one
+ * texel outside the picture: the seam between the two halves of a 320-pixel
+ * background). The console's last pixel uses max - 1, so clamp to that. */
+static inline s32 uv_hi(const nr_swr *r, const nr_rcmd *c, int axis, bool sprite)
+{
+    s32 lo = axis ? c->uv_min_v : c->uv_min_u, hi = axis ? c->uv_max_v : c->uv_max_u;
+    if (!sprite && (r->sx > 1 || r->sy > 1) && hi > lo) hi--;
+    return hi;
+}
+
 /* bilinear lookup, taps clamped to the primitive's own texel rectangle */
 static bool texel_bilinear(const nr_swr *r, const nr_rcmd *c, float u, float v, bool sprite, u32 *out)
 {
@@ -158,8 +170,8 @@ static bool texel_bilinear(const nr_swr *r, const nr_rcmd *c, float u, float v, 
     bool have_nearest = false;
     int k;
     for (k = 0; k < 4; k++) {
-        s32 su = clampi(iu + (k & 1), c->uv_min_u, c->uv_max_u);
-        s32 sv = clampi(iv + (k >> 1), c->uv_min_v, c->uv_max_v);
+        s32 su = clampi(iu + (k & 1), c->uv_min_u, uv_hi(r, c, 0, sprite));
+        s32 sv = clampi(iv + (k >> 1), c->uv_min_v, uv_hi(r, c, 1, sprite));
         float w = ((k & 1) ? tu : 1.0f - tu) * ((k >> 1) ? tv : 1.0f - tv);
         if (texel(r, c, su, sv, &t)) {
             acc[0] += w * (float)(t & 0xFF);
@@ -197,6 +209,8 @@ static inline void put(const nr_swr *r, const shade_ctx *sc, int X, int Y, float
             if (!texel_bilinear(r, sc->c, u, v, sc->sprite, &t)) return;
         } else {
             s32 tu = (s32)floorf(sc->sprite ? u : u + 0.5f), tv = (s32)floorf(sc->sprite ? v : v + 0.5f);
+            tu = clampi(tu, sc->c->uv_min_u, uv_hi(r, sc->c, 0, sc->sprite));
+            tv = clampi(tv, sc->c->uv_min_v, uv_hi(r, sc->c, 1, sc->sprite));
             if (!texel(r, sc->c, tu, tv, &t)) return;
         }
         semi_px = sc->semi && (t & 0x01000000u);

@@ -75,6 +75,9 @@ none of them is distributed.
   console) and the CPU memory access-time log (`cpu/access-time`) were used
   **locally** to validate the GTE and calibrate the CPU memory timing. No file
   of that project is included here.
+- **OpenBIOS** from PCSX-Redux (<https://github.com/pcsx-redux/nugget>, MIT
+  licence) was read as documentation of the retail BIOS memory-card event
+  sequence; no code was copied.
 - USB HID Usage Tables 1.4 and Device Class Definition for HID 1.11 (USB
   Implementers Forum) for the HID report-descriptor parser.
 - [SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB) and

@@ -58,7 +58,7 @@ static void dump_cb(void *user, const char *stream, const char *tag, const u8 *c
 {
     FILE *out = (FILE *)user;
     if (strcmp(tag, "SWVR") == 0) fprintf(out, "SWVR  %s\n", stream);
-    else if (strcmp(tag, "VAGB") == 0) fprintf(out, "  VAGB mono  %6u bytes ADPCM (%u samples)\n", sz - 0x18, (sz - 0x18) / 16 * 28);
+    else if (strcmp(tag, "VAGB") == 0) fprintf(out, "  VAGB mono  %6u bytes ADPCM (%u samples)\n", (unsigned)(sz - 0x18), (unsigned)((sz - 0x18) / 16 * 28));
     else if (strcmp(tag, "VAGM") == 0)
         fprintf(out, "  VAGM block %u/%u, %u bytes per channel\n", nr_rd16(c + 0x16) + 1, nr_rd16(c + 0x14), nr_rd32(c + 0x18));
     else fprintf(out, "  %-4s %u bytes\n", tag, sz);

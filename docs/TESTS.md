@@ -73,7 +73,7 @@ data is involved (the disc-based tests above are run locally).
 | Windows MinGW-w64 | build with warnings as errors and unit tests (the toolchain of the released binaries) |
 | Windows MSVC | build and unit tests with Visual Studio |
 | cppcheck | static analysis (warnings, performance, portability; `src/third_party` excluded) |
-| CodeQL | GitHub security analysis with the `security-and-quality` queries; results appear in the repository's Security tab |
+| CodeQL | GitHub security analysis through the repository's CodeQL default setup (Settings > Code security; choose the "Extended" query suite for more checks); results appear in the Security tab |
 | Hygiene | `scripts/check_package.py` (no disc images, game files or binaries committed) and ShellCheck on the scripts |
 
 Compiler errors, sanitizer reports and failed test checks are shown as

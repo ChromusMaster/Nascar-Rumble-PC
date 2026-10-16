@@ -90,7 +90,7 @@ bool nr_swr_configure(nr_swr *r, const nr_gfx_settings *s, bool *needs_sync)
         size_t n = (size_t)1024 * S * ax * 512 * S * ay;
         u32 *v = (u32 *)calloc(n, sizeof(u32));
         if (!v) {
-            NR_ERR("render", "not enough memory for internal resolution %dx with AA %dx (%zu MB)", S, ax * ay, n * 4 >> 20);
+            NR_ERR("render", "not enough memory for internal resolution %dx with AA %dx (%lu MB)", S, ax * ay, (unsigned long)(n * 4 >> 20));
             return false;
         }
         free(r->vram);

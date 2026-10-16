@@ -788,7 +788,6 @@ static void br_cb(void *user, const char *name, bool is_dir)
     L->nbent++;
 }
 
-static int br_cmp_launcher_index;
 static launcher *g_sort_L;
 static int br_cmp(const void *a, const void *b)
 {
@@ -800,7 +799,7 @@ static int br_cmp(const void *a, const void *b)
 static void browse_open(launcher *L, const char *dir)
 {
     br_ctx c;
-    int idx[256], i;
+    int idx[256] = { 0 }, i;
     char tmp[256][256];
     bool tdir[256];
     c.L = L;
@@ -809,7 +808,6 @@ static void browse_open(launcher *L, const char *dir)
     nr_list_dir(dir, br_cb, &c);
     for (i = 0; i < L->nbent; i++) idx[i] = i;
     g_sort_L = L;
-    (void)br_cmp_launcher_index;
     qsort(idx, (size_t)L->nbent, sizeof(int), br_cmp);
     for (i = 0; i < L->nbent; i++) { memcpy(tmp[i], L->bent[idx[i]], sizeof(tmp[0])); tdir[i] = L->bent_dir[idx[i]]; }
     for (i = 0; i < L->nbent; i++) { memcpy(L->bent[i], tmp[i], sizeof(tmp[0])); L->bent_dir[i] = tdir[i]; }

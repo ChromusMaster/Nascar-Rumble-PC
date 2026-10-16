@@ -26,8 +26,11 @@ void nr_config_set(nr_config *c, const char *key, const char *value)
         if (nr_strcasecmp(c->items[i].key, key) == 0) { nr_strlcpy(c->items[i].value, value, sizeof(c->items[i].value)); return; }
     }
     if (c->n == c->cap) {
-        c->cap = c->cap ? c->cap * 2 : 32;
-        c->items = (kv *)realloc(c->items, sizeof(kv) * (size_t)c->cap);
+        int ncap = c->cap ? c->cap * 2 : 32;
+        kv *ni = (kv *)realloc(c->items, sizeof(kv) * (size_t)ncap);
+        if (!ni) return;           /* out of memory: keep the old table */
+        c->items = ni;
+        c->cap = ncap;
     }
     nr_strlcpy(c->items[c->n].key, key, sizeof(c->items[0].key));
     nr_strlcpy(c->items[c->n].value, value, sizeof(c->items[0].value));
@@ -107,6 +110,7 @@ bool nr_config_update_file(const char *path, const char *fullkey, const char *va
     long sec_end = -1;           /* offset in out after the last line of the section */
     bool done = false, in_sec = false;
     FILE *f;
+#define GROW(need_cap) do { char *g_ = (char *)realloc(out, (need_cap)); if (!g_) { free(out); free(txt); return false; } out = g_; cap = (need_cap); } while (0)
     if (!dot || (size_t)(dot - fullkey) >= sizeof(section)) { free(txt); return false; }
     memcpy(section, fullkey, (size_t)(dot - fullkey));
     section[dot - fullkey] = 0;
@@ -150,7 +154,7 @@ bool nr_config_update_file(const char *path, const char *fullkey, const char *va
                     kk[kl] = 0;
                     if (nr_strcasecmp(trim(kk), key) == 0) {
                         size_t need = strlen(key) + strlen(value) + 8;
-                        if (len + need >= cap) { cap = cap * 2 + need; out = (char *)realloc(out, cap); }
+                        if (len + need >= cap) GROW(cap * 2 + need);
                         len += (size_t)snprintf(out + len, cap - len, "%s = %s\n", key, value);
                         done = true;
                         continue;
@@ -158,7 +162,7 @@ bool nr_config_update_file(const char *path, const char *fullkey, const char *va
                 }
             }
         }
-        if (len + ll + 2 >= cap) { cap = cap * 2 + ll; out = (char *)realloc(out, cap); }
+        if (len + ll + 2 >= cap) GROW(cap * 2 + ll);
         memcpy(out + len, line, ll);     /* the untouched original line */
         len += ll;
         out[len++] = '\n';
@@ -169,7 +173,7 @@ bool nr_config_update_file(const char *path, const char *fullkey, const char *va
         int al;
         if (sec_end >= 0) al = snprintf(add, sizeof(add), "%s = %s\n", key, value);
         else { al = snprintf(add, sizeof(add), "\n[%s]\n%s = %s\n", section, key, value); sec_end = (long)len; }
-        if (len + (size_t)al + 1 >= cap) { cap = len + (size_t)al + 16; out = (char *)realloc(out, cap); }
+        if (len + (size_t)al + 1 >= cap) GROW(len + (size_t)al + 16);
         memmove(out + sec_end + al, out + sec_end, len - (size_t)sec_end);
         memcpy(out + sec_end, add, (size_t)al);
         len += (size_t)al;
@@ -181,4 +185,5 @@ bool nr_config_update_file(const char *path, const char *fullkey, const char *va
     free(out);
     free(txt);
     return true;
+#undef GROW
 }

@@ -51,6 +51,7 @@ int nr_input_list(nr_input_device *out, int max)
         const char *nm;
         memset(d, 0, sizeof(*d));
         SDL_JoystickGetGUIDString(g, gs, sizeof(gs));
+        /* cppcheck-suppress uninitvar ; out[0..n-1] were filled by earlier iterations */
         for (j = 0; j < n; j++) if (out[j].kind == NR_DEV_SDL && strncmp(out[j].id + 4, gs, strlen(gs)) == 0) same++;
         d->kind = NR_DEV_SDL;
         snprintf(d->id, sizeof(d->id), "sdl:%s@%d", gs, same);

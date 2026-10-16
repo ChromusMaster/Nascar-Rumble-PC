@@ -27,7 +27,7 @@ jobs:
       matrix:
         cc: [gcc, clang]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Report compiler and test messages as annotations
         run: |
           echo "::add-matcher::.github/problem-matchers/gcc.json"
@@ -55,7 +55,7 @@ jobs:
     name: Linux AddressSanitizer + UBSan
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Report compiler, sanitizer and test messages as annotations
         run: |
           echo "::add-matcher::.github/problem-matchers/gcc.json"
@@ -94,7 +94,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -121,7 +121,7 @@ jobs:
     env:
       SDL2_VERSION: 2.30.9
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Report compiler and test messages as annotations
         shell: bash
         run: |
@@ -147,7 +147,7 @@ jobs:
     name: Static analysis (cppcheck)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install cppcheck
         run: |
           sudo apt-get update
@@ -159,36 +159,13 @@ jobs:
           --inline-suppr --error-exitcode=1 --quiet
           -I src -i src/third_party
           --suppress=missingIncludeSystem
+          --suppress=*:src/third_party/*
           -D__linux__ -DNR_VERSION_STRING=\"ci\"
           src tests
 
-  # ---------------------------------------------------------------------------
-  # Security analysis: GitHub CodeQL with the security-and-quality queries.
-  codeql:
-    name: Security analysis (CodeQL)
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends cmake ninja-build libsdl2-dev
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: c-cpp
-          build-mode: manual
-          queries: security-and-quality
-      - name: Build
-        run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
-          cmake --build build
-      - uses: github/codeql-action/analyze@v3
-        with:
-          category: /language:c-cpp
+  # Security analysis (CodeQL) runs through the repository's CodeQL "default
+  # setup" (Settings > Code security), which GitHub does not allow to be
+  # combined with a workflow-based CodeQL job.
 
   # ---------------------------------------------------------------------------
   # Repository hygiene: no game data or binaries may ever be committed, shell
@@ -197,7 +174,7 @@ jobs:
     name: No game data / script checks
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: No game data, disc images or binaries in the repository
         run: python3 scripts/check_package.py .
       - name: ShellCheck

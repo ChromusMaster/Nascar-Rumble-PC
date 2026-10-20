@@ -1,8 +1,8 @@
-/* Text rendering for the launcher: TrueType/OpenType fonts installed on the
- * system, rasterised with stb_truetype, with per-glyph fallback across a
- * chain of fonts (a Latin UI font plus a CJK font for Chinese, Japanese and
- * Korean). No font is shipped with the launcher; if nothing usable is found
- * the built-in 8x8 bitmap font is used (Latin only). */
+/* Text rendering for the launcher, rasterised with stb_truetype, with
+ * per-glyph fallback across a chain of fonts: the embedded NREngine Sans
+ * (lfont.c, Latin-1 and UI punctuation), then a Latin UI font installed on
+ * the system, then a CJK font for Chinese, Japanese and Korean. If no font
+ * can be used at all, the built-in 8x8 bitmap font is used (Latin only). */
 #ifndef NR_LTEXT_H
 #define NR_LTEXT_H
 
@@ -30,5 +30,6 @@ int lt_width(int px, const char *utf8);
 int lt_line_height(int px);
 /* description of the fonts in use (for the log) */
 const char *lt_font_info(void);
+bool lt_builtin_covers(const char *utf8);
 
 #endif

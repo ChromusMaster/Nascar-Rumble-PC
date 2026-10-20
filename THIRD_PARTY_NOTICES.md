@@ -35,8 +35,16 @@ freely, subject to the following restrictions:
 `src/third_party/stb_truetype.h` v1.26 by Sean Barrett and contributors,
 <https://github.com/nothings/stb>. Dual-licensed by its authors as **public
 domain (Unlicense)** or **MIT**; the file keeps its original licence text at
-the end. It is used to draw the launcher's text with fonts already installed
-on the user's system (no font file is distributed).
+the end. It is used to draw the launcher's text with the embedded NREngine Sans
+font and, as fallback, fonts already installed on the user's system (no
+system font file is distributed).
+
+### NREngine Sans (launcher font)
+
+`src/launcher/lfont.c` holds the TrueType data of **NREngine Sans**, an
+original typeface of this project. Every outline is built geometrically by
+`scripts/gen_launcher_font.py`; no third-party font, glyph or outline was
+used or traced. It is covered by the project's MIT licence (`LICENSE`).
 
 ### font8x8 (in-game overlay font)
 

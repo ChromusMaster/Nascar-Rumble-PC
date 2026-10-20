@@ -32,7 +32,25 @@ tree. The build never downloads anything.
 
 Optional at run time on Linux: `fontconfig` (finds system fonts for the
 launcher; loaded with `dlopen`, not linked) and `fonts-noto-cjk` (needed only
-to show the launcher in Chinese, Japanese or Korean).
+to show the launcher in Chinese, Japanese or Korean). Latin texts use the
+font embedded in the launcher (NREngine Sans), so no system font is needed
+for English, Portuguese or Spanish.
+
+### Launcher font (maintainers only)
+
+`src/launcher/lfont.c` is generated and committed; building never needs
+Python. To change the font, edit `scripts/gen_launcher_font.py` and run it
+from the repository root (needs `fontTools` and `skia-pathops`; `brotli`
+for WOFF2):
+
+```sh
+pip install fonttools skia-pathops brotli
+python3 scripts/gen_launcher_font.py                 # rewrites src/launcher/lfont.c
+python3 scripts/gen_launcher_font.py --out fonts     # also writes .ttf, .otf, .woff, .woff2
+```
+
+The standalone files written by `--out` are for previews and other uses only;
+they are not part of the source tree.
 
 ## 3. Linux (any distribution)
 

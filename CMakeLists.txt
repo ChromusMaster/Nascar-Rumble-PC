@@ -74,7 +74,7 @@ if(NR_BUILD_SDL2)
     add_executable(nrengine WIN32 ${NR_FRONTEND_SOURCES})
     target_link_libraries(nrengine nrcore ${NR_SDL_LIBS})
     # launcher
-    add_executable(nrlauncher WIN32 src/launcher/launcher.c src/launcher/lui.c src/launcher/ltext.c src/launcher/l10n.c
+    add_executable(nrlauncher WIN32 src/launcher/launcher.c src/launcher/lui.c src/launcher/ltext.c src/launcher/lfont.c src/launcher/l10n.c
                    src/ui/font8x8.c ${NR_INPUT_SOURCES})
     target_link_libraries(nrlauncher nrcore ${NR_SDL_LIBS})
     if(WIN32)
@@ -97,8 +97,11 @@ endif()
 
 if(NR_BUILD_TESTS)
   enable_testing()
-  add_executable(nrtests tests/test_main.c)
+  add_executable(nrtests tests/test_main.c src/launcher/ltext.c src/launcher/lfont.c src/launcher/l10n.c src/ui/font8x8.c)
   target_link_libraries(nrtests nrcore)
+  if(NOT WIN32)
+    target_link_libraries(nrtests ${CMAKE_DL_LIBS})
+  endif()
   target_compile_definitions(nrtests PRIVATE NR_GOLDEN_FILE="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden_slus01068.txt")
   add_test(NAME unit COMMAND nrtests)
   if(DEFINED ENV{NR_DISC})

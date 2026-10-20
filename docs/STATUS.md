@@ -30,6 +30,12 @@ every track and car, options, help screens and credits, saving/loading a
 championship. These paths use the same core and did not trigger missing
 features, but they were not walked through systematically.
 
+### Validated in the development version (after 0.3.2)
+
+| Item | How it was validated |
+|---|---|
+| Launcher font (NREngine Sans) | `nrtests` checks that the embedded font covers Latin-1, the UI punctuation and every string of the English, Portuguese and Spanish launcher tables, and that it is first in the font chain; screenshots (Xvfb) in Portuguese, English, Spanish (Argentina) and Japanese, the last one mixing the embedded font with Noto Sans CJK |
+
 ### Validated in 0.3.0
 
 | Item | How it was validated |

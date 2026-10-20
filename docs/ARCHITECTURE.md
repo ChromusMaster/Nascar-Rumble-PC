@@ -67,7 +67,7 @@ replaced without touching the core.
 | `src/platform/video.h`, `sdl2/vb_software.c`, `sdl2/vb_opengl.c`, `gl_shaders.h`, `win32/vb_d3d9/10/11/12.c`, `win32/d3d_common.c`, `win32/d3d_shaders.h` | presentation renderers |
 | `src/input` | controllers: SDL game controller/joystick, direct HID (`hidraw.c`: Windows SetupAPI + `hid.dll`, Linux hidraw with our own descriptor parser `hidparse.c`), bindings and port configuration |
 | `src/ui` | in-game overlay: pause/quit dialog, FPS counter, messages (public-domain 8×8 font) |
-| `src/launcher` | launcher: immediate-mode UI (`lui.c`), TrueType text with system fonts (`ltext.c`, `stb_truetype.h`), translations (`l10n.c`, `l10n_tables.inc`), tabs and engine start (`launcher.c`) |
+| `src/launcher` | launcher: immediate-mode UI (`lui.c`), TrueType text with the embedded NREngine Sans font and system fonts as fallback (`ltext.c`, `lfont.c`, `stb_truetype.h`), translations (`l10n.c`, `l10n_tables.inc`), tabs and engine start (`launcher.c`) |
 | `src/tools/nrtool.c` | disc inspection tool and `export-text` |
 | `tests/test_main.c` | unit and regression tests |
 | `packaging/` | `.desktop` entry, icon, udev rule, Debian `postinst` |

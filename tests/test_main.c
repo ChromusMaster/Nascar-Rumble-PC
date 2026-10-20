@@ -16,6 +16,8 @@
 #include "../src/mods/mods.h"
 #include "../src/input/hidparse.h"
 #include "../src/common/proc.h"
+#include "../src/launcher/ltext.h"
+#include "../src/launcher/l10n.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -465,6 +467,31 @@ static void test_misc(void)
     }
 }
 
+static void test_launcher_font(void)
+{
+    char latin1[192 * 2 + 1];
+    int i, n = 0, l, id;
+    fprintf(stderr, "[launcher font]\n");
+    for (i = 0x20; i < 0x7F; i++) latin1[n++] = (char)i;
+    for (i = 0xA0; i < 0x100; i++) { latin1[n++] = (char)(0xC0 | (i >> 6)); latin1[n++] = (char)(0x80 | (i & 0x3F)); }
+    latin1[n] = 0;
+    CHECK(lt_builtin_covers(latin1));
+    CHECK(lt_builtin_covers("\xE2\x80\x98\xE2\x80\x99\xE2\x80\x9C\xE2\x80\x9D\xE2\x80\xA6\xE2\x80\x93\xE2\x80\x94\xE2\x82\xAC"));
+    CHECK(!lt_builtin_covers("\xE6\x97\xA5"));
+    for (l = 0; l < l10n_count(); l++) {
+        const l10n_lang *lang = l10n_get(l);
+        if (lang->script != LT_LATIN) continue;
+        l10n_set(l);
+        for (id = 0; id < S_COUNT; id++)
+            if (!lt_builtin_covers(T(id))) { fprintf(stderr, "  %s string %d not covered\n", lang->code, id); CHECK(0); }
+    }
+    l10n_set(0);
+    CHECK(lt_init());
+    CHECK(strncmp(lt_font_info(), "built-in NREngine Sans", 22) == 0);
+    CHECK(lt_width(20, "Configura\xC3\xA7\xC3\xB5" "es") > lt_width(20, "Configura"));
+    CHECK_EQ(lt_line_height(20), 26);
+    lt_shutdown();
+}
 
 /* ---------------------------------------------------------------- audio sync */
 
@@ -966,6 +993,7 @@ int main(int argc, char **argv)
     test_adpcm();
     test_disc();
     test_misc();
+    test_launcher_font();
     test_hle();
     test_audio_sync();
     test_swr();

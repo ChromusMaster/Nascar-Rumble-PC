@@ -1,0 +1,19 @@
+Test project /workspace/scratch/d698c4f25270/build-sdl3
+    Start 1: sdl_adapter
+1/7 Test #1: sdl_adapter ......................   Passed    0.05 sec
+    Start 2: atomic_io
+2/7 Test #2: atomic_io ........................   Passed    0.01 sec
+    Start 3: mod_security
+3/7 Test #3: mod_security .....................   Passed    0.00 sec
+    Start 4: render_security
+4/7 Test #4: render_security ..................   Passed    4.78 sec
+    Start 5: config_security
+5/7 Test #5: config_security ..................   Passed    0.01 sec
+    Start 6: font_security
+6/7 Test #6: font_security ....................   Passed    0.00 sec
+    Start 7: unit
+7/7 Test #7: unit .............................   Passed    0.41 sec
+
+100% tests passed out of 7
+
+Total Test time (real) =   5.26 sec

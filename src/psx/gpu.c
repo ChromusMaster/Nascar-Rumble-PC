@@ -340,9 +340,9 @@ static void draw_triangle(psx *p, vtx v0, vtx v1, vtx v2, const prim_state *ps)
                 s32 r, gc, b;
                 if (ps->gouraud) {
                     r = (s32)(rr >> 16); gc = (s32)(gg >> 16); b = (s32)(bb >> 16);
-                    if (r < 0) r = 0; if (r > 255) r = 255;
-                    if (gc < 0) gc = 0; if (gc > 255) gc = 255;
-                    if (b < 0) b = 0; if (b > 255) b = 255;
+                    r = r < 0 ? 0 : r > 255 ? 255 : r;
+                    gc = gc < 0 ? 0 : gc > 255 ? 255 : gc;
+                    b = b < 0 ? 0 : b > 255 ? 255 : b;
                 } else { r = v0.r; gc = v0.g; b = v0.b; }
                 plot(g, ps, x, y, r, gc, b, ps->textured ? (s32)(uu >> 16) : 0, ps->textured ? (s32)(vv >> 16) : 0, ps->dither);
             }
@@ -858,7 +858,7 @@ void gpu_write_gp1(psx *p, u32 v)
     case 0x03: g->disp_enabled = !(v & 1); break;
     case 0x04: g->dma_dir = v & 3; break;
     case 0x05:
-        if ((v & 0x7FFFF) != (((u32)g->disp_y << 10) | g->disp_x)) { g->flips++; NR_TRACE("flip", "vblank %llu prims %llu", (unsigned long long)g->frame_count, (unsigned long long)g->prims); }
+        if ((v & 0x7FFFF) != (((u32)g->disp_y << 10) | g->disp_x)) { g->flips++; if (g->pgxp) nr_pgxp_tick(g->pgxp); NR_TRACE("flip", "vblank %llu prims %llu", (unsigned long long)g->frame_count, (unsigned long long)g->prims); }
         g->disp_x = v & 0x3FF; g->disp_y = (v >> 10) & 0x1FF; NR_TRACE("gpu", "display start %u,%u frame=%llu", g->disp_x, g->disp_y, (unsigned long long)g->frame_count); break;
     case 0x06: g->hrange1 = v & 0xFFF; g->hrange2 = (v >> 12) & 0xFFF; break;
     case 0x07: g->vrange1 = v & 0x3FF; g->vrange2 = (v >> 10) & 0x3FF; break;

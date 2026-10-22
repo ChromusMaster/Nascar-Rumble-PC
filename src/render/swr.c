@@ -27,6 +27,8 @@ struct nr_swr {
     int S, ax, ay, sx, sy;
     int W, H;
     u32 *vram;
+    u32 copy_line[1024 * MAX_SCALE];
+    size_t vram_count;
     u32 *out;
     size_t out_cap;
     nr_pool *pool;
@@ -80,7 +82,9 @@ void nr_swr_free(nr_swr *r)
 
 bool nr_swr_configure(nr_swr *r, const nr_gfx_settings *s, bool *needs_sync)
 {
-    int S = s->internal_scale, ax, ay;
+    int S, ax, ay;
+    if (!r || !s || !needs_sync) return false;
+    S = s->internal_scale;
     if (S < 1) S = 1;
     if (S > 8) S = 8;
     nr_gfx_aa_grid(s->antialias, &ax, &ay);
@@ -88,13 +92,16 @@ bool nr_swr_configure(nr_swr *r, const nr_gfx_settings *s, bool *needs_sync)
     *needs_sync = false;
     if (!r->vram || S * ax != r->sx || S * ay != r->sy) {
         size_t n = (size_t)1024 * S * ax * 512 * S * ay;
-        u32 *v = (u32 *)calloc(n, sizeof(u32));
+        u32 *v;
+        if (n > SIZE_MAX / sizeof(u32)) return false;
+        v = (u32 *)calloc(n, sizeof(u32));
         if (!v) {
-            NR_ERR("render", "not enough memory for internal resolution %dx with AA %dx (%zu MB)", S, ax * ay, n * 4 >> 20);
+            NR_ERR("render", "not enough memory for internal resolution %dx with AA %dx (%lu MB)", S, ax * ay, (unsigned long)(n * sizeof(u32) >> 20));
             return false;
         }
         free(r->vram);
         r->vram = v;
+        r->vram_count = n;
         r->sx = S * ax; r->sy = S * ay;
         r->W = 1024 * r->sx; r->H = 512 * r->sy;
         *needs_sync = true;
@@ -107,13 +114,17 @@ bool nr_swr_configure(nr_swr *r, const nr_gfx_settings *s, bool *needs_sync)
 
 void nr_swr_scale(const nr_swr *r, int *sx, int *sy) { *sx = r->sx; *sy = r->sy; }
 u64 nr_swr_barriers(const nr_swr *r) { return r->barriers; }
-u32 nr_swr_pixel(const nr_swr *r, int hx, int hy) { return r->vram[(size_t)hy * r->W + hx]; }
+u32 nr_swr_pixel(const nr_swr *r, int hx, int hy)
+{
+    if (!r || !r->vram || hx < 0 || hy < 0 || hx >= r->W || hy >= r->H) return 0;
+    return r->vram[(size_t)hy * (size_t)r->W + (size_t)hx];
+}
 
 /* ----------------------------------------------------------- VRAM access */
 
 static inline u32 at_native(const nr_swr *r, u32 x, u32 y)
 {
-    return r->vram[(size_t)((y & 511) * r->sy) * r->W + (x & 1023) * r->sx];
+    return r->vram[(size_t)(y & 511u) * (size_t)r->sy * (size_t)r->W + (size_t)(x & 1023u) * (size_t)r->sx];
 }
 
 /* Texel lookup in native texel coordinates. Returns false for transparent
@@ -452,19 +463,19 @@ static void do_copy(nr_swr *r, const nr_rcmd *c)
 {
     u32 j, i;
     int k, n = r->sx;
-    u32 *line = (u32 *)malloc((size_t)c->w * r->sx * sizeof(u32));
+    u32 *line = r->copy_line;
     bool chk = (c->flags & RF_CHECK_MASK) != 0;
     u32 setm = (c->flags & RF_SET_MASK) ? 0x01000000u : 0;
-    if (!line) return;
+    if (c->w > 1024 || c->h > 512) { NR_ERR("render", "invalid VRAM copy dimensions"); return; }
     for (j = 0; j < c->h; j++) {
         for (k = 0; k < r->sy; k++) {
             int sY = (int)(((c->sy + j) & 511) * r->sy) + k, dY = (int)(((c->y + j) & 511) * r->sy) + k;
             for (i = 0; i < c->w; i++) {
-                const u32 *s = &r->vram[(size_t)sY * r->W + ((c->sx + i) & 1023) * r->sx];
+                const u32 *s = &r->vram[(size_t)sY * r->W + (size_t)((c->sx + i) & 1023u) * (size_t)r->sx];
                 memcpy(line + i * n, s, (size_t)n * sizeof(u32));
             }
             for (i = 0; i < c->w; i++) {
-                u32 *d = &r->vram[(size_t)dY * r->W + ((c->x + i) & 1023) * r->sx];
+                u32 *d = &r->vram[(size_t)dY * r->W + (size_t)((c->x + i) & 1023u) * (size_t)r->sx];
                 int q;
                 for (q = 0; q < n; q++) {
                     if (chk && (d[q] & 0x01000000u)) continue;
@@ -473,7 +484,6 @@ static void do_copy(nr_swr *r, const nr_rcmd *c)
             }
         }
     }
-    free(line);
 }
 
 /* --------------------------------------------------------------- replay */
@@ -563,6 +573,21 @@ void nr_swr_execute(nr_swr *r, const nr_rlist *l)
 {
     u32 i, seg = 0;
     bbox w = { 0, 0, 0, 0, false };
+    if (!r || !r->vram || !l || r->sx < 1 || r->sx > MAX_SCALE || r->sy < 1 || r->sy > MAX_SCALE ||
+        r->W != 1024 * r->sx || r->H != 512 * r->sy ||
+        r->vram_count != (size_t)r->W * (size_t)r->H || l->n > l->cap || (l->n && !l->cmd)) {
+        NR_ERR("render", "invalid renderer state; replay rejected"); return;
+    }
+    for (i = 0; i < l->n; i++) {
+        const nr_rcmd *c = &l->cmd[i];
+        if ((c->type == R_COPY || c->type == R_FILL || c->type == R_UPLOAD) && (c->w > 1024 || c->h > 512)) {
+            NR_ERR("render", "invalid VRAM command dimensions; replay rejected"); return;
+        }
+        if (c->type == R_UPLOAD && (!l->data || c->data > l->ndata ||
+            (size_t)c->w * (size_t)c->h > l->ndata - c->data)) {
+            NR_ERR("render", "invalid VRAM upload bounds; replay rejected"); return;
+        }
+    }
     for (i = 0; i < l->n; i++) {
         const nr_rcmd *c = &l->cmd[i];
         if (reads_hazard(&w, c)) {
@@ -585,6 +610,7 @@ void nr_swr_execute(nr_swr *r, const nr_rlist *l)
 void nr_swr_sync(nr_swr *r, const u16 *vram)
 {
     u32 x, y;
+    if (!r || !r->vram || !vram) return;
     for (y = 0; y < 512; y++)
         for (x = 0; x < 1024; x++) fill_block(r, x, y, expand15(vram[y * 1024 + x]), 0, r->H);
 }
@@ -630,6 +656,9 @@ const u32 *nr_swr_output(nr_swr *r, const nr_rlist *l, int *w, int *h)
     const nr_rdisplay *d = &l->display;
     size_t need;
     int dw = d->width > 0 ? d->width : 320, dh = d->height > 0 ? d->height : 240;
+    if (!r->vram || r->S < 1 || dw > 1024 || dh > 512 || (d->rgb24 && !l->disp24)) {
+        NR_ERR("render", "invalid output dimensions or display buffer"); return NULL;
+    }
     r->out_w = dw * r->S;
     r->out_h = dh * r->S;
     need = (size_t)r->out_w * r->out_h;

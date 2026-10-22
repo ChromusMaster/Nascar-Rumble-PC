@@ -91,7 +91,7 @@ void nr_paths_init(void)
             /* /usr/games/nrengine -> /usr/share/nrengine; /opt/x/bin -> /opt/x/share/nrengine */
             if (strncmp(g_exe, "/usr/local/", 11) == 0) nr_strlcpy(g_share, "/usr/local/share/nrengine", sizeof(g_share));
             else if (strncmp(g_exe, "/usr/", 5) == 0) nr_strlcpy(g_share, "/usr/share/nrengine", sizeof(g_share));
-            else snprintf(g_share, sizeof(g_share), "%s/../share/nrengine", g_exe);
+            else if ((size_t)snprintf(g_share, sizeof(g_share), "%s/../share/nrengine", g_exe) >= sizeof(g_share)) nr_strlcpy(g_share, g_exe, sizeof(g_share));
         }
     }
 #endif

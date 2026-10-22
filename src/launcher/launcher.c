@@ -13,9 +13,13 @@
 #include "../disc/discsel.h"
 #include "../input/input.h"
 #include "../render/postfx.h"
+#include "../platform/sysinfo.h"
 
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include "../platform/nr_sdl.h"
+#ifdef NR_SDL3
+#include <SDL3/SDL_main.h>
+#endif
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,7 +69,7 @@ typedef struct {
     int capture_mode;          /* 0 none, 1 keyboard, 2 controller */
     int capture_button;
     u32 capture_start;
-    bool kb_state[SDL_NUM_SCANCODES];
+    bool kb_state[SDL_SCANCODE_COUNT];
     /* file browser (non-Windows) */
     bool browsing;
     char bdir[1024];
@@ -80,6 +84,7 @@ typedef struct {
     bool running;
     bool font_warned;
     int autoplay;              /* test hook: 1 = press Play on this frame */
+    nr_sysinfo si;
 } launcher;
 
 /* ------------------------------------------------------------ settings */
@@ -319,10 +324,7 @@ static void choose_disc_file(launcher *L)
 {
 #ifdef _WIN32
     char path[1024];
-    SDL_SysWMinfo info;
-    void *hwnd = NULL;
-    SDL_VERSION(&info.version);
-    if (SDL_GetWindowWMInfo(L->win, &info)) hwnd = info.info.win.window;
+    void *hwnd = nr_sdl_native_window(L->win);
     if (nr_win_open_file(hwnd, T(S_BROWSE_TITLE), path, sizeof(path))) {
         nr_strlcpy(L->st.o.cfg_disc, path, sizeof(L->st.o.cfg_disc));
         L->st.o.cfg_disc_image[0] = 0;
@@ -438,7 +440,7 @@ static void tab_graphics(launcher *L)
 {
     nr_options *o = &L->st.o;
     nr_gfx_settings *g = &o->gfx;
-    int i, c;
+    int i, c, limit;
     {
 #ifdef _WIN32
         static const char *const ids[] = { "auto", "opengl", "d3d9", "d3d10", "d3d11", "d3d12", "software" };
@@ -458,23 +460,33 @@ static void tab_graphics(launcher *L)
         nr_strlcpy(o->renderer, ids[c], sizeof(o->renderer));
     }
     g->vsync = toggle_row(L, COL1, 1, T(S_VSYNC), T(S_H_VSYNC), g->vsync);
+    limit = nr_sysinfo_scale_limit(&L->si, nr_strcasecmp(o->renderer, "software") == 0);
     {
         char lab[8][48];
         const char *items[8];
+        int nres = limit < 8 ? limit : 8;
         for (i = 0; i < 8; i++) {
             if (i == 0) snprintf(lab[i], sizeof(lab[i]), "%s (320 x 240)", T(S_RES_NATIVE));
             else snprintf(lab[i], sizeof(lab[i]), "%dx (%d x %d)", i + 1, 320 * (i + 1), 240 * (i + 1));
             items[i] = lab[i];
         }
-        g->internal_scale = 1 + combo_row(L, COL1, 2, T(S_INTERNAL_RES), T(S_H_INTERNAL_RES), items, 8, g->internal_scale - 1);
+        if (g->internal_scale > nres) g->internal_scale = nres;
+        if (g->internal_scale < 1) g->internal_scale = 1;
+        g->internal_scale = 1 + combo_row(L, COL1, 2, T(S_INTERNAL_RES), T(S_H_INTERNAL_RES), items, nres, g->internal_scale - 1);
     }
     {
         static const int aa[5] = { 1, 2, 4, 8, 16 };
         const char *items[5];
+        int naa = 1;
         items[0] = T(S_OFF); items[1] = "2x (2 x 1)"; items[2] = "4x (2 x 2)"; items[3] = "8x (4 x 2)"; items[4] = "16x (4 x 4)";
+        for (i = 1; i < 5; i++) {
+            int ax, ay;
+            nr_gfx_aa_grid(aa[i], &ax, &ay);
+            if (g->internal_scale * ax <= limit && g->internal_scale * ay <= limit) naa = i + 1;
+        }
         c = 0;
-        for (i = 0; i < 5; i++) if (aa[i] == g->antialias) c = i;
-        g->antialias = aa[combo_row(L, COL1, 3, T(S_AA), T(S_H_AA), items, 5, c)];
+        for (i = 0; i < naa; i++) if (aa[i] <= g->antialias) c = i;
+        g->antialias = aa[combo_row(L, COL1, 3, T(S_AA), T(S_H_AA), items, naa, c)];
     }
     {
         const char *items[2];
@@ -583,7 +595,7 @@ static void tab_effects(launcher *L)
         if (L->test_src && L->test_dst) {
             nr_gfx_settings pg = *g;
             pg.scaling = GFX_SCALE_BILINEAR;
-            nr_postfx_render(&pg, L->test_src, pw, ph, ph, L->test_dst, dw, dh, SDL_GetTicks() / 16, NULL);
+            nr_postfx_render(&pg, L->test_src, pw, ph, ph, L->test_dst, dw, dh, nr_sdl_ticks() / 16, NULL);
             for (y = 0; y < dh && y0 + y < u->s.h; y++)
                 for (x = 0; x < dw && x0 + x < u->s.w; x++) u->s.px[(y0 + y) * u->s.w + x0 + x] = L->test_dst[y * dw + x] | 0xFF000000u;
         }
@@ -679,10 +691,10 @@ static void tab_controls(launcher *L)
                 lui_text(u, x0, y + 6, 15, LUI_TEXT, T(k_ps_label[b]));
                 if (L->capture_mode == 1 && L->capture_button == b) nr_strlcpy(kt, "...", sizeof(kt));
                 else nr_strlcpy(kt, pc->keys[b] ? SDL_GetScancodeName((SDL_Scancode)pc->keys[b]) : "-", sizeof(kt));
-                kon = pc->keys[b] && pc->keys[b] < SDL_NUM_SCANCODES && L->kb_state[pc->keys[b]];
+                kon = pc->keys[b] && pc->keys[b] < SDL_SCANCODE_COUNT && L->kb_state[pc->keys[b]];
                 lui_help(u, T(S_H_BINDING));
                 if (lui_cell(u, lui_r(u, x0 + 110, y, 140, 28), kt, kon) && !L->capture_mode) {
-                    L->capture_mode = 1; L->capture_button = b; L->capture_start = SDL_GetTicks();
+                    L->capture_mode = 1; L->capture_button = b; L->capture_start = nr_sdl_ticks();
                 }
                 if (L->capture_mode == 2 && L->capture_button == b) nr_strlcpy(pt, "...", sizeof(pt));
                 else {
@@ -693,7 +705,7 @@ static void tab_controls(launcher *L)
                 pon = L->pad && nr_pad_binding_active(L->pad, bind);
                 lui_help(u, T(S_H_BINDING));
                 if (lui_cell(u, lui_r(u, x0 + 260, y, 172, 28), pt, pon) && !L->capture_mode && L->pad) {
-                    L->capture_mode = 2; L->capture_button = b; L->capture_start = SDL_GetTicks();
+                    L->capture_mode = 2; L->capture_button = b; L->capture_start = nr_sdl_ticks();
                     nr_pad_capture_begin(L->pad);
                 }
             }
@@ -764,6 +776,11 @@ static void tab_advanced(launcher *L)
         snprintf(t, sizeof(t), "fonts: %s", lt_font_info());
         lui_text_fit(u, lui_px(u, COL2), lui_px(u, row_y(1) + 44), lui_px(u, 13), LUI_DIM, t, lui_px(u, 430));
         if (lui_button(u, lui_r(u, COL2, row_y(3), 240, 30), T(S_BTN_OPEN_USER), false)) open_folder(nr_user_dir());
+        snprintf(t, sizeof(t), "CPU: %d threads, RAM: %llu MiB", L->si.cpu_threads, (unsigned long long)(L->si.ram_total >> 20));
+        lui_text_fit(u, lui_px(u, COL2), lui_px(u, row_y(4) + 8), lui_px(u, 13), LUI_DIM, t, lui_px(u, 430));
+        if (L->si.gpu_vram) snprintf(t, sizeof(t), "GPU: %s, %llu MiB", L->si.gpu_name[0] ? L->si.gpu_name : "?", (unsigned long long)(L->si.gpu_vram >> 20));
+        else snprintf(t, sizeof(t), "GPU: memory unknown");
+        lui_text_fit(u, lui_px(u, COL2), lui_px(u, row_y(4) + 30), lui_px(u, 13), LUI_DIM, t, lui_px(u, 430));
     }
 }
 
@@ -950,7 +967,7 @@ static void frame(launcher *L)
     }
     if (lui_button(u, lui_r(u, 846, 590, 98, 38), T(S_BTN_QUIT), false)) {
         SDL_Event q;
-        q.type = SDL_QUIT;
+        q.type = SDL_EVENT_QUIT;
         SDL_PushEvent(&q);
     }
     if (u->help) lui_text_fit(u, lui_px(u, 20), lui_px(u, 548), lui_px(u, 13), 0xFFC8C8C8u, u->help, lui_px(u, 920));
@@ -977,7 +994,7 @@ static lui_key map_key(SDL_Keycode k, Uint16 mod)
     case SDLK_PAGEDOWN: return LK_NEXT_TAB;
     case SDLK_HOME: return LK_HOME;
     case SDLK_END: return LK_END;
-    case SDLK_TAB: return (mod & KMOD_SHIFT) ? LK_UP : LK_DOWN;
+    case SDLK_TAB: return (mod & SDL_KMOD_SHIFT) ? LK_UP : LK_DOWN;
     default: return LK_NONE;
     }
 }
@@ -985,14 +1002,14 @@ static lui_key map_key(SDL_Keycode k, Uint16 mod)
 static lui_key map_button(Uint8 b)
 {
     switch (b) {
-    case SDL_CONTROLLER_BUTTON_DPAD_UP: return LK_UP;
-    case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return LK_DOWN;
-    case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return LK_LEFT;
-    case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return LK_RIGHT;
-    case SDL_CONTROLLER_BUTTON_A: return LK_ENTER;
-    case SDL_CONTROLLER_BUTTON_B: return LK_BACK;
-    case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return LK_PREV_TAB;
-    case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: return LK_NEXT_TAB;
+    case SDL_GAMEPAD_BUTTON_DPAD_UP: return LK_UP;
+    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return LK_DOWN;
+    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return LK_LEFT;
+    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return LK_RIGHT;
+    case SDL_GAMEPAD_BUTTON_SOUTH: return LK_ENTER;
+    case SDL_GAMEPAD_BUTTON_EAST: return LK_BACK;
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return LK_PREV_TAB;
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return LK_NEXT_TAB;
     default: return LK_NONE;
     }
 }
@@ -1011,7 +1028,7 @@ static void choose_ui_language(launcher *L)
 static bool ensure_target(launcher *L)
 {
     int w, h;
-    SDL_GetRendererOutputSize(L->ren, &w, &h);
+    nr_sdl_output_size(L->ren, &w, &h);
     if (w <= 0 || h <= 0) return false;
     if (!L->tex || w != L->tw || h != L->th) {
         if (L->tex) SDL_DestroyTexture(L->tex);
@@ -1038,17 +1055,18 @@ int main(int argc, char **argv)
     nr_utf8_args(&argc, &argv);
     nr_paths_init();
     nr_log_set_level(NR_LOG_WARN);
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK) != 0) {
+    if (!nr_sdl_init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_JOYSTICK)) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
     lt_init();
     settings_load(&L->st);
+    nr_sysinfo_query(&L->si);
     choose_ui_language(L);
     {
         SDL_Rect r;
-        if (SDL_GetDisplayUsableBounds(0, &r) == 0) {
+        if (nr_sdl_display_bounds(&r)) {
             float k = (float)r.h * 0.85f / LH;
             if (k > 1.6f) k = 1.6f;
             if (k < 1.0f) k = 1.0f;
@@ -1056,12 +1074,11 @@ int main(int argc, char **argv)
             scale = k < 0.6f ? 0.6f : k;
         }
     }
-    L->win = SDL_CreateWindow(T(S_WINDOW_TITLE), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, (int)(LW * scale), (int)(LH * scale),
-                              SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    L->win = nr_sdl_window(T(S_WINDOW_TITLE), (int)(LW * scale), (int)(LH * scale), false, false);
     if (!L->win) { fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
     SDL_SetWindowMinimumSize(L->win, LW / 2, LH / 2);
-    L->ren = SDL_CreateRenderer(L->win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!L->ren) L->ren = SDL_CreateRenderer(L->win, -1, SDL_RENDERER_SOFTWARE);
+    L->ren = nr_sdl_renderer(L->win, false, true);
+    if (!L->ren) L->ren = nr_sdl_renderer(L->win, true, false);
     if (!L->ren) { fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError()); SDL_Quit(); return 1; }
     L->u.focus = -1;
     L->u.popup_id = -1;
@@ -1107,44 +1124,44 @@ int main(int argc, char **argv)
         }
         while (SDL_PollEvent(&ev)) {
             switch (ev.type) {
-            case SDL_QUIT: quit = true; break;
-            case SDL_KEYDOWN:
-                L->kb_state[ev.key.keysym.scancode] = true;
+            case SDL_EVENT_QUIT: quit = true; break;
+            case SDL_EVENT_KEY_DOWN:
+                if ((unsigned)NR_SDL_SCAN(ev) < SDL_SCANCODE_COUNT) L->kb_state[NR_SDL_SCAN(ev)] = true;
                 if (L->capture_mode) {
                     nr_port_config *pc = &L->st.port[L->ctl_player];
-                    SDL_Scancode sc = ev.key.keysym.scancode;
+                    SDL_Scancode sc = NR_SDL_SCAN(ev);
                     if (sc == SDL_SCANCODE_ESCAPE) L->capture_mode = 0;
                     else if (sc == SDL_SCANCODE_BACKSPACE) {
                         if (L->capture_mode == 1) pc->keys[L->capture_button] = 0;
                         else pc->bind[L->capture_button][0] = 0;
                         L->capture_mode = 0;
-                    } else if (L->capture_mode == 1 && SDL_GetTicks() - L->capture_start > 150) {
+                    } else if (L->capture_mode == 1 && nr_sdl_ticks() - L->capture_start > 150) {
                         pc->keys[L->capture_button] = (int)sc;
                         L->capture_mode = 0;
                     }
                     break;
                 }
-                if (L->browsing && ev.key.keysym.sym == SDLK_ESCAPE) { L->browsing = false; break; }
-                if (L->browsing && ev.key.keysym.sym == SDLK_BACKSPACE) { browse_up(L); break; }
-                L->u.key = map_key(ev.key.keysym.sym, ev.key.keysym.mod);
+                if (L->browsing && NR_SDL_KEY(ev) == SDLK_ESCAPE) { L->browsing = false; break; }
+                if (L->browsing && NR_SDL_KEY(ev) == SDLK_BACKSPACE) { browse_up(L); break; }
+                L->u.key = map_key(NR_SDL_KEY(ev), NR_SDL_MOD(ev));
                 break;
-            case SDL_KEYUP:
-                L->kb_state[ev.key.keysym.scancode] = false;
+            case SDL_EVENT_KEY_UP:
+                if ((unsigned)NR_SDL_SCAN(ev) < SDL_SCANCODE_COUNT) L->kb_state[NR_SDL_SCAN(ev)] = false;
                 break;
-            case SDL_CONTROLLERBUTTONDOWN:
-                if (!L->capture_mode) L->u.key = map_button(ev.cbutton.button);
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+                if (!L->capture_mode) L->u.key = map_button(NR_SDL_PAD_BUTTON(ev));
                 break;
-            case SDL_MOUSEBUTTONDOWN:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (ev.button.button == SDL_BUTTON_LEFT) L->u.mpressed = true;
                 break;
-            case SDL_MOUSEBUTTONUP:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
                 if (ev.button.button == SDL_BUTTON_LEFT) L->u.mreleased = true;
                 break;
-            case SDL_MOUSEWHEEL:
-                L->u.wheel += ev.wheel.y;
+            case SDL_EVENT_MOUSE_WHEEL:
+                L->u.wheel += (int)ev.wheel.y;
                 break;
-            case SDL_JOYDEVICEADDED:
-            case SDL_JOYDEVICEREMOVED:
+            case SDL_EVENT_JOYSTICK_ADDED:
+            case SDL_EVENT_JOYSTICK_REMOVED:
                 scan_devices(L);
                 L->pad_for[0] = 0;          /* reopen */
                 nr_pad_close(L->pad);
@@ -1161,12 +1178,12 @@ int main(int argc, char **argv)
             if (nr_pad_capture(L->pad, b, sizeof(b))) {
                 nr_strlcpy(L->st.port[L->ctl_player].bind[L->capture_button], b, sizeof(L->st.port[0].bind[0]));
                 L->capture_mode = 0;
-            } else if (SDL_GetTicks() - L->capture_start > 10000) L->capture_mode = 0;
+            } else if (nr_sdl_ticks() - L->capture_start > 10000) L->capture_mode = 0;
         } else if (L->pad) {
             nr_pad_update(L->pad);
         }
         if (!ensure_target(L)) { SDL_Delay(50); continue; }
-        mstate = SDL_GetMouseState(&mx, &my);
+        mstate = nr_sdl_mouse(&mx, &my);
         {
             int ww, wh;
             SDL_GetWindowSize(L->win, &ww, &wh);
@@ -1174,7 +1191,7 @@ int main(int argc, char **argv)
             L->u.my = wh > 0 ? my * L->th / wh : my;
         }
         L->u.mdown = (mstate & SDL_BUTTON_LMASK) != 0;
-        if (!L->autoplay && getenv("NRLAUNCHER_AUTOPLAY") && SDL_GetTicks() > 1500) L->autoplay = 1;
+        if (!L->autoplay && getenv("NRLAUNCHER_AUTOPLAY") && nr_sdl_ticks() > 1500) L->autoplay = 1;
         {   /* test hook: NRLAUNCHER_TEST_CLICKS="x,y;x,y;..." clicks at window pixel
              * positions, one every 8 frames (used to reproduce UI problems) */
             static int tframe;
@@ -1199,7 +1216,7 @@ int main(int argc, char **argv)
         }
         SDL_UpdateTexture(L->tex, NULL, L->u.s.px, L->tw * 4);
         SDL_RenderClear(L->ren);
-        SDL_RenderCopy(L->ren, L->tex, NULL, NULL);
+        nr_sdl_render_texture(L->ren, L->tex, NULL, NULL);
         SDL_RenderPresent(L->ren);
     }
     nr_pad_close(L->pad);

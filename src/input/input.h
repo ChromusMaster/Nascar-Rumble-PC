@@ -34,7 +34,7 @@ typedef struct {
     u16 vid, pid;
     bool mapped;         /* SDL knows its layout (standard bindings available) */
     bool accessible;     /* HID: false when the OS denies access */
-    int sdl_index;       /* SDL device index (SDL devices) */
+    u32 sdl_index;       /* SDL device index (SDL devices) */
     char path[512];      /* HID device path */
 } nr_input_device;
 

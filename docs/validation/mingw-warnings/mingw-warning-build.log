@@ -1,0 +1,104 @@
+-- Performing Test NR_HAS_WMISLEADING_INDENTATION
+-- Performing Test NR_HAS_WMISLEADING_INDENTATION - Success
+-- Performing Test NR_HAS_WFORMAT_TRUNCATION
+-- Performing Test NR_HAS_WFORMAT_TRUNCATION - Success
+-- Building launcher and frontend with SDL3
+-- Configuring done (0.8s)
+-- Generating done (0.2s)
+-- Build files have been written to: /workspace/scratch/d698c4f25270/build-sdl3
+[  1%] Building C object CMakeFiles/nr_font_security.dir/src/launcher/lfont.c.o
+[  2%] Building C object CMakeFiles/nr_font_security.dir/tests/test_font_security.c.o
+[  3%] Building C object CMakeFiles/nrcore.dir/src/common/common.c.o
+[  4%] Building C object CMakeFiles/nrcore.dir/src/common/image.c.o
+[  5%] Building C object CMakeFiles/nrcore.dir/src/common/config.c.o
+[  7%] Building C object CMakeFiles/nrcore.dir/src/disc/disc.c.o
+[  8%] Building C object CMakeFiles/nrcore.dir/src/disc/gameid.c.o
+[  9%] Building C object CMakeFiles/nrcore.dir/src/disc/manifest_slus01068.c.o
+[ 10%] Building C object CMakeFiles/nrcore.dir/src/psx/psx.c.o
+[ 11%] Building C object CMakeFiles/nrcore.dir/src/psx/cpu.c.o
+[ 13%] Building C object CMakeFiles/nrcore.dir/src/psx/bus.c.o
+[ 14%] Building C object CMakeFiles/nrcore.dir/src/psx/gte.c.o
+[ 15%] Linking C executable nr_font_security
+[ 16%] Building C object CMakeFiles/nrcore.dir/src/psx/dma.c.o
+[ 17%] Building C object CMakeFiles/nrcore.dir/src/psx/timers.c.o
+[ 17%] Built target nr_font_security
+[ 19%] Building C object CMakeFiles/nrcore.dir/src/psx/gpu.c.o
+[ 20%] Building C object CMakeFiles/nrcore.dir/src/psx/cdrom.c.o
+[ 21%] Building C object CMakeFiles/nrcore.dir/src/psx/spu.c.o
+[ 22%] Building C object CMakeFiles/nrcore.dir/src/psx/mdec.c.o
+[ 23%] Building C object CMakeFiles/nrcore.dir/src/psx/sio.c.o
+[ 25%] Building C object CMakeFiles/nrcore.dir/src/psx/hle_bios.c.o
+[ 26%] Building C object CMakeFiles/nrcore.dir/src/psx/overrides.c.o
+[ 27%] Building C object CMakeFiles/nrcore.dir/src/formats/ctrl.c.o
+[ 28%] Building C object CMakeFiles/nrcore.dir/src/formats/bs.c.o
+[ 29%] Building C object CMakeFiles/nrcore.dir/src/formats/lsc.c.o
+[ 30%] Building C object CMakeFiles/nrcore.dir/src/formats/swvr.c.o
+[ 32%] Building C object CMakeFiles/nrcore.dir/src/formats/adpcm.c.o
+[ 33%] Building C object CMakeFiles/nrcore.dir/src/app/audio_sync.c.o
+[ 34%] Building C object CMakeFiles/nrcore.dir/src/app/app.c.o
+[ 35%] Building C object CMakeFiles/nrcore.dir/src/native/native.c.o
+[ 36%] Building C object CMakeFiles/nrcore.dir/src/native/pace.c.o
+[ 38%] Building C object CMakeFiles/nrcore.dir/src/render/rlist.c.o
+[ 39%] Building C object CMakeFiles/nrcore.dir/src/render/gfx.c.o
+[ 40%] Building C object CMakeFiles/nrcore.dir/src/render/swr.c.o
+[ 41%] Building C object CMakeFiles/nrcore.dir/src/render/postfx.c.o
+[ 42%] Building C object CMakeFiles/nrcore.dir/src/render/gpu_replay.c.o
+[ 44%] Building C object CMakeFiles/nrcore.dir/src/common/thread.c.o
+[ 45%] Building C object CMakeFiles/nrcore.dir/src/mods/mods.c.o
+[ 46%] Building C object CMakeFiles/nrcore.dir/src/disc/discsel.c.o
+[ 47%] Building C object CMakeFiles/nrcore.dir/src/common/paths.c.o
+[ 48%] Building C object CMakeFiles/nrcore.dir/src/input/hidparse.c.o
+[ 50%] Building C object CMakeFiles/nrcore.dir/src/common/proc.c.o
+[ 51%] Linking C static library libnrcore.a
+[ 51%] Built target nrcore
+[ 52%] Building C object CMakeFiles/nrtool.dir/src/tools/nrtool.c.o
+[ 53%] Building C object CMakeFiles/nrlauncher.dir/src/input/hidraw.c.o
+[ 54%] Building C object CMakeFiles/nrengine_headless.dir/src/app/main_headless.c.o
+[ 55%] Building C object CMakeFiles/nrengine.dir/src/input/hidraw.c.o
+[ 57%] Linking C executable nrengine_headless
+[ 58%] Linking C executable nrtool
+[ 58%] Built target nrengine_headless
+[ 58%] Built target nrtool
+[ 59%] Building C object CMakeFiles/nrengine.dir/src/input/input.c.o
+[ 60%] Building C object CMakeFiles/nrlauncher.dir/src/input/input.c.o
+[ 61%] Building C object CMakeFiles/nr_sdl_tests.dir/src/input/hidraw.c.o
+[ 63%] Building C object CMakeFiles/nrengine.dir/src/platform/sdl2/main_sdl.c.o
+[ 64%] Building C object CMakeFiles/nr_atomic_io.dir/tests/test_atomic_io.c.o
+[ 65%] Linking C executable nr_atomic_io
+[ 66%] Building C object CMakeFiles/nr_sdl_tests.dir/src/input/input.c.o
+[ 67%] Building C object CMakeFiles/nrlauncher.dir/src/launcher/l10n.c.o
+[ 69%] Building C object CMakeFiles/nrengine.dir/src/platform/sdl2/vb_opengl.c.o
+[ 69%] Built target nr_atomic_io
+[ 70%] Building C object CMakeFiles/nr_mod_security.dir/tests/test_mod_security.c.o
+[ 71%] Building C object CMakeFiles/nr_sdl_tests.dir/tests/test_sdl.c.o
+[ 72%] Linking C executable nr_mod_security
+[ 73%] Building C object CMakeFiles/nrlauncher.dir/src/launcher/launcher.c.o
+[ 73%] Built target nr_mod_security
+[ 75%] Building C object CMakeFiles/nrengine.dir/src/platform/sdl2/vb_software.c.o
+[ 76%] Linking C executable nr_sdl_tests
+[ 77%] Building C object CMakeFiles/nrlauncher.dir/src/launcher/lfont.c.o
+[ 78%] Building C object CMakeFiles/nr_render_security.dir/tests/test_render_security.c.o
+[ 79%] Building C object CMakeFiles/nrengine.dir/src/platform/video.c.o
+[ 79%] Built target nr_sdl_tests
+[ 80%] Building C object CMakeFiles/nr_config_security.dir/tests/test_config_security.c.o
+[ 82%] Building C object CMakeFiles/nrengine.dir/src/ui/canvas.c.o
+[ 83%] Linking C executable nr_render_security
+[ 84%] Building C object CMakeFiles/nrengine.dir/src/ui/font8x8.c.o
+[ 84%] Built target nr_render_security
+[ 85%] Linking C executable nr_config_security
+[ 86%] Building C object CMakeFiles/nrlauncher.dir/src/launcher/ltext.c.o
+[ 88%] Building C object CMakeFiles/nrengine.dir/src/ui/ui.c.o
+[ 89%] Linking C executable nrengine
+[ 89%] Built target nr_config_security
+[ 90%] Building C object CMakeFiles/nrlauncher.dir/src/launcher/lui.c.o
+[ 91%] Building C object CMakeFiles/nrtests.dir/src/launcher/l10n.c.o
+[ 91%] Built target nrengine
+[ 92%] Building C object CMakeFiles/nrlauncher.dir/src/ui/font8x8.c.o
+[ 94%] Building C object CMakeFiles/nrtests.dir/src/launcher/lfont.c.o
+[ 95%] Building C object CMakeFiles/nrtests.dir/src/launcher/ltext.c.o
+[ 96%] Building C object CMakeFiles/nrtests.dir/tests/test_main.c.o
+[ 97%] Building C object CMakeFiles/nrtests.dir/src/ui/font8x8.c.o
+[ 98%] Linking C executable nrlauncher
+[ 98%] Built target nrlauncher
+[100%] Linking C executable nrtests
+[100%] Built target nrtests

@@ -5,7 +5,7 @@
 #include "../../render/postfx.h"
 #include "../../common/thread.h"
 
-#include <SDL.h>
+#include "../nr_sdl.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -23,17 +23,15 @@ typedef struct {
 static bool sw_init(nr_vbackend *b, void *window, const nr_gfx_settings *s, char *err, size_t n)
 {
     sw_impl *im = (sw_impl *)calloc(1, sizeof(sw_impl));
-    SDL_RendererInfo info;
     if (!im) return false;
     im->win = (SDL_Window *)window;
     im->s = *s;
-    im->ren = SDL_CreateRenderer(im->win, -1, SDL_RENDERER_ACCELERATED | (s->vsync ? SDL_RENDERER_PRESENTVSYNC : 0));
-    if (!im->ren) im->ren = SDL_CreateRenderer(im->win, -1, 0);
+    im->ren = nr_sdl_renderer(im->win, false, s->vsync);
+    if (!im->ren) im->ren = nr_sdl_renderer(im->win, true, false);
     if (!im->ren) { SDL_snprintf(err, n, "SDL_CreateRenderer: %s", SDL_GetError()); free(im); return false; }
     im->pool = nr_pool_new(0);
     b->impl = im;
-    if (SDL_GetRendererInfo(im->ren, &info) == 0)
-        SDL_snprintf(b->description, sizeof(b->description), "software (presented through SDL %s)", info.name);
+    SDL_snprintf(b->description, sizeof(b->description), "software (presented through SDL %s)", nr_sdl_renderer_name(im->ren));
     return true;
 }
 
@@ -41,7 +39,7 @@ static bool sw_configure(nr_vbackend *b, const nr_gfx_settings *s)
 {
     sw_impl *im = (sw_impl *)b->impl;
 #if SDL_VERSION_ATLEAST(2, 0, 18)
-    if (s->vsync != im->s.vsync) SDL_RenderSetVSync(im->ren, s->vsync ? 1 : 0);
+    if (s->vsync != im->s.vsync) SDL_SetRenderVSync(im->ren, s->vsync ? 1 : 0);
 #endif
     im->s = *s;
     return true;
@@ -62,7 +60,7 @@ static void upload(SDL_Texture *t, const u32 *px, int w, int h)
 {
     void *dst;
     int pitch, y;
-    if (SDL_LockTexture(t, NULL, &dst, &pitch) != 0) return;
+    if (!nr_sdl_lock_texture(t, &dst, &pitch)) return;
     for (y = 0; y < h; y++) memcpy((u8 *)dst + (size_t)y * pitch, px + (size_t)y * w, (size_t)w * 4);
     SDL_UnlockTexture(t);
 }
@@ -87,33 +85,33 @@ static void sw_present(nr_vbackend *b, const nr_vpresent *p)
                 nr_postfx_render(&im->s, p->picture, p->pic_w, p->pic_h, p->native_h, im->post, w, h, p->frame, im->pool);
                 upload(im->pic, im->post, w, h);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
-                SDL_SetTextureScaleMode(im->pic, SDL_ScaleModeNearest);
+                SDL_SetTextureScaleMode(im->pic, SDL_SCALEMODE_NEAREST);
 #endif
-                SDL_RenderCopy(im->ren, im->pic, NULL, &dst);
+                nr_sdl_render_texture(im->ren, im->pic, NULL, &dst);
             }
         } else if (ensure_tex(im->ren, &im->pic, &im->pic_w, &im->pic_h, p->pic_w, p->pic_h, false)) {
             upload(im->pic, p->picture, p->pic_w, p->pic_h);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
-            SDL_SetTextureScaleMode(im->pic, (im->s.scaling == GFX_SCALE_BILINEAR) ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
+            SDL_SetTextureScaleMode(im->pic, (im->s.scaling == GFX_SCALE_BILINEAR) ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
 #endif
-            SDL_RenderCopy(im->ren, im->pic, NULL, &dst);
+            nr_sdl_render_texture(im->ren, im->pic, NULL, &dst);
         }
     }
     if (p->overlay && p->overlay->px && ensure_tex(im->ren, &im->ovl, &im->ovl_w, &im->ovl_h, p->overlay->w, p->overlay->h, true)) {
         upload(im->ovl, p->overlay->px, p->overlay->w, p->overlay->h);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
-        SDL_SetTextureScaleMode(im->ovl, SDL_ScaleModeNearest);
+        SDL_SetTextureScaleMode(im->ovl, SDL_SCALEMODE_NEAREST);
 #endif
-        SDL_RenderCopy(im->ren, im->ovl, NULL, NULL);
+        nr_sdl_render_texture(im->ren, im->ovl, NULL, NULL);
     }
     if (b->capture_next) {
         int w2, h2;
         b->capture_next = false;
-        if (SDL_GetRendererOutputSize(im->ren, &w2, &h2) == 0) {
+        if (nr_sdl_output_size(im->ren, &w2, &h2) == 0) {
             u32 *n = (u32 *)realloc(b->cap_px, (size_t)w2 * h2 * 4);
             if (n) {
                 b->cap_px = n;
-                if (SDL_RenderReadPixels(im->ren, NULL, SDL_PIXELFORMAT_ABGR8888, n, w2 * 4) == 0) { b->cap_w = w2; b->cap_h = h2; }
+                if (nr_sdl_read_pixels(im->ren, n, w2, h2)) { b->cap_w = w2; b->cap_h = h2; }
             }
         }
     }

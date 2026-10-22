@@ -32,7 +32,25 @@ tree. The build never downloads anything.
 
 Optional at run time on Linux: `fontconfig` (finds system fonts for the
 launcher; loaded with `dlopen`, not linked) and `fonts-noto-cjk` (needed only
-to show the launcher in Chinese, Japanese or Korean).
+to show the launcher in Chinese, Japanese or Korean). Latin texts use the
+font embedded in the launcher (NREngine Sans), so no system font is needed
+for English, Portuguese or Spanish.
+
+### Launcher font (maintainers only)
+
+`src/launcher/lfont.c` is generated and committed; building never needs
+Python. To change the font, edit `scripts/gen_launcher_font.py` and run it
+from the repository root (needs `fontTools` and `skia-pathops`; `brotli`
+for WOFF2):
+
+```sh
+pip install fonttools skia-pathops brotli
+python3 scripts/gen_launcher_font.py                 # rewrites src/launcher/lfont.c
+python3 scripts/gen_launcher_font.py --out fonts     # also writes .ttf, .otf, .woff, .woff2
+```
+
+The standalone files written by `--out` are for previews and other uses only;
+they are not part of the source tree.
 
 ## 3. Linux (any distribution)
 
@@ -135,40 +153,70 @@ Uninstall: `xargs sudo rm < build/install_manifest.txt`.
 
 ## 4. Debian / Ubuntu package (.deb)
 
-### 4.1 One command
+### 4.1 Target distributions
+
+The package is built against the oldest current stable release so that one
+`.deb` installs on both supported families:
+
+| Distribution | glibc | SDL3 package | Kernel shipped |
+|---|---|---|---|
+| Debian 13 "trixie" (13.7, September 2026) | 2.41 | `libsdl3-0` 3.2.10 | 6.12 LTS |
+| Ubuntu 26.04 LTS "Resolute Raccoon" | 2.43 | `libsdl3-0` 3.4.2 | 7.0 |
+
+The kernel version does not matter for this package: NR Engine is an ordinary
+user-space program that talks to the kernel only through glibc, SDL3 and the
+`hidraw` interface, which have been stable for many years. What decides
+compatibility is the glibc version and the SDL3 version the binaries were
+linked against, which is why the package is built on Debian 13.
+
+### 4.2 One command on Debian or Ubuntu
 
 ```sh
-sudo apt install build-essential cmake libsdl2-dev dpkg-dev file
+sudo apt install build-essential cmake libsdl3-dev dpkg-dev file
 scripts/build_deb.sh
 ```
 
-The script:
+The script configures a Release build in `build-deb/` with prefix `/usr`,
+compiles every program, runs the unit tests (no game data involved), runs
+CPack with the DEB generator (`dpkg-shlibdeps` fills `Depends:` with the
+libraries the binaries actually use) and writes
+`dist/nrengine_<version>_<arch>.deb`.
 
-1. configures a Release build in `build-deb/` with prefix `/usr`;
-2. compiles all programs;
-3. runs the unit tests (no game data involved);
-4. runs CPack with the DEB generator. `dpkg-shlibdeps` reads the binaries and
-   fills `Depends:` with the exact libraries they use (for example
-   `libc6`, `libsdl2-2.0-0`);
-5. writes `dist/nrengine_0.3.2_<arch>.deb` (and a `.tar.gz` with the same
-   layout).
+### 4.3 From Windows (Docker Desktop)
 
-### 4.2 By hand
+The `.deb` must be built by a Linux toolchain. With Docker Desktop running:
+
+```bat
+scripts\build_deb_docker.bat
+```
+
+or, from a Linux or WSL shell, `scripts/build_deb_docker.sh`. Both start a
+throw-away `debian:13` container, install the build dependencies, copy the
+source tree (read-only mount), run `scripts/build_deb.sh` and write the
+package to `dist\`. Another image can be passed as the first argument (for
+example `ubuntu:26.04`); a package built on a newer distribution does not
+install on an older one.
+
+### 4.4 By hand
 
 ```sh
-cmake -S . -B build-deb -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+cmake -S . -B build-deb -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DNR_SDL_VERSION=3
 cmake --build build-deb --parallel "$(nproc)"
 cd build-deb && cpack -G DEB
 ```
 
-### 4.3 Check and install
+With an SDL3 built from source (no `libsdl3-dev` package for `dpkg-shlibdeps`
+to query) add `-DNR_DEB_SHLIBDEPS=OFF`; the fixed list
+`libc6 (>= 2.34), libsdl3-0 (>= 3.2.0)` is used instead.
+
+### 4.5 Check and install
 
 ```sh
-dpkg-deb --info     dist/nrengine_0.3.2_amd64.deb   # metadata and dependencies
-dpkg-deb --contents dist/nrengine_0.3.2_amd64.deb   # file list
-sudo apt install ./dist/nrengine_0.3.2_amd64.deb     # apt resolves libsdl2 automatically
-nrlauncher                                           # or "NR Engine" in the applications menu
-sudo apt remove nrengine                             # remove
+dpkg-deb -f         dist/nrengine_*_amd64.deb
+dpkg-deb --contents dist/nrengine_*_amd64.deb
+sudo apt install ./dist/nrengine_*_amd64.deb
+nrlauncher
+sudo apt remove nrengine
 ```
 
 Package details:
@@ -177,7 +225,7 @@ Package details:
 |---|---|
 | Name | `nrengine` |
 | Section / priority | `games` / `optional` |
-| Depends | computed by `dpkg-shlibdeps` (libc6, libsdl2-2.0-0) |
+| Depends | computed by `dpkg-shlibdeps` (libc6, libsdl3-0) |
 | Recommends | `fontconfig`, `fonts-noto-cjk` |
 | Suggests | `libgl1` (OpenGL driver) |
 | Maintainer scripts | `postinst` reloads the udev rules and the icon cache |
@@ -193,6 +241,9 @@ engine is portable C99 and does not use x86-specific code.
 ## 5. Windows
 
 ### 5.1 MinGW-w64 / llvm-mingw (recommended)
+
+`scripts\build_windows.bat` builds with warnings treated as errors and then
+runs the unit tests (`ctest`). A build that produces any warning fails.
 
 1. Install CMake from <https://cmake.org/download/> (tick "Add CMake to the
    PATH").
@@ -235,7 +286,32 @@ comes from pacman, so no path is needed). Copy `SDL2.dll` from
 > with designated initialisers, which MSVC 2019+ accepts; report any
 > error with the compiler output.
 
-### 5.3 What the Windows build uses
+### 5.3 Windows 7 to Windows 11
+
+The executables target Windows 7 SP1 and later (`_WIN32_WINNT=0x0601` is
+defined for every Windows build, so an API newer than Windows 7 is a compile
+error instead of a start-up failure). The imports of `nrengine.exe`,
+`nrlauncher.exe` and `nrengine_headless.exe` were checked: `kernel32`,
+`user32`, `shell32`, `comdlg32`, `bcrypt`, `hid` and `setupapi` functions that
+all exist on Windows 7. Direct3D 10/11, DXGI and the shader compiler are
+loaded at run time; Direct3D 12 exists only on Windows 10 and later, and on
+older systems the engine falls back to Direct3D 11, OpenGL, Direct3D 9 or the
+software renderer. SDL3 supports every desktop Windows version back to XP.
+
+The C runtime depends on the toolchain:
+
+| Toolchain | C runtime | Windows 7 / 8 / 8.1 |
+|---|---|---|
+| MinGW-w64 "UCRT" builds (WinLibs UCRT, MSYS2 UCRT64, llvm-mingw `ucrt`) | Universal CRT (`api-ms-win-crt-*.dll`) | needs update KB2999226 or a later cumulative update |
+| MinGW-w64 "MSVCRT" builds (WinLibs MSVCRT, MSYS2 MINGW64, llvm-mingw `msvcrt`) | `msvcrt.dll` | works without updates |
+| Visual Studio | Universal CRT | needs KB2999226 |
+
+`scripts\build_windows.bat` reports which runtime the compiler in `PATH`
+uses. For a release meant to run on an unpatched Windows 7, build with an
+MSVCRT toolchain. Windows 7 needs SP1 and, for the Direct3D 11 renderer,
+the Platform Update (KB2670838); without it the engine uses another renderer.
+
+### 5.4 What the Windows build uses
 
 - Direct3D 9/10/11/12, DXGI and `d3dcompiler_47.dll` are loaded at run time;
   a missing component only disables that renderer.

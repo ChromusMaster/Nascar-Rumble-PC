@@ -14,9 +14,13 @@
 #include "../../input/input.h"
 #include "../../ui/ui.h"
 #include "../video.h"
+#include "../sysinfo.h"
 
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include "../nr_sdl.h"
+#ifdef NR_SDL3
+#include <SDL3/SDL_main.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,14 +38,7 @@ static void show_error(const char *msg)
 static void *window_handle(SDL_Window *w, const nr_vbackend *b)
 {
     if (strcmp(b->name, "software") == 0 || b->needs_gl_window) return w;
-#ifdef _WIN32
-    {
-        SDL_SysWMinfo info;
-        SDL_VERSION(&info.version);
-        if (SDL_GetWindowWMInfo(w, &info)) return info.info.win.window;
-    }
-#endif
-    return NULL;
+    return nr_sdl_native_window(w);
 }
 
 static bool create_backend(const char *name, nr_vbackend *b)
@@ -59,17 +56,14 @@ static bool create_backend(const char *name, nr_vbackend *b)
 
 static SDL_Window *make_window(const nr_options *o, bool gl)
 {
-    Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI | (o->fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
     int scale = o->scale > 0 ? o->scale : 3;
-    if (gl) flags |= SDL_WINDOW_OPENGL;
-    return SDL_CreateWindow("NASCAR Rumble - NR Engine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                            320 * scale, 240 * scale, flags);
+    return nr_sdl_window("NASCAR Rumble - NR Engine", 320 * scale, 240 * scale, gl, o->fullscreen);
 }
 
 /* Tries the chosen renderer, then the fallbacks. The window is recreated
  * when a backend needs an OpenGL window and the current one is not (or the
  * other way round). */
-static bool open_backend(SDL_Window **win, const nr_options *o, nr_vbackend *b)
+static bool open_backend(SDL_Window **win, const nr_options *o, nr_vbackend *b, const nr_sysinfo *si)
 {
     const char *order[8];
     int n = 0, i;
@@ -99,6 +93,7 @@ static bool open_backend(SDL_Window **win, const nr_options *o, nr_vbackend *b)
             if (!*win) { NR_WARN("video", "cannot create the window: %s", SDL_GetError()); continue; }
         }
         err[0] = 0;
+        nr_gfx_set_memory_scale_limit(nr_sysinfo_scale_limit(si, strcmp(lname, "software") == 0));
         if (b->init(b, window_handle(*win, b), &o->gfx, err, sizeof(err))) {
             NR_INFO("video", "renderer: %s%s%s", b->name, b->description[0] ? " - " : "", b->description);
             if (nr_strcasecmp(lname, o->renderer) != 0 && nr_strcasecmp(o->renderer, "auto") != 0)
@@ -146,12 +141,12 @@ static nr_ui_key map_key(SDL_Keycode k)
 static nr_ui_key map_button(Uint8 b)
 {
     switch (b) {
-    case SDL_CONTROLLER_BUTTON_DPAD_UP: return UI_KEY_UP;
-    case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return UI_KEY_DOWN;
-    case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return UI_KEY_LEFT;
-    case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return UI_KEY_RIGHT;
-    case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_START: return UI_KEY_ACCEPT;
-    case SDL_CONTROLLER_BUTTON_B: return UI_KEY_BACK;
+    case SDL_GAMEPAD_BUTTON_DPAD_UP: return UI_KEY_UP;
+    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return UI_KEY_DOWN;
+    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return UI_KEY_LEFT;
+    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return UI_KEY_RIGHT;
+    case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: return UI_KEY_ACCEPT;
+    case SDL_GAMEPAD_BUTTON_EAST: return UI_KEY_BACK;
     default: return UI_KEY_NONE;
     }
 }
@@ -205,8 +200,9 @@ int main(int argc, char **argv)
 {
     nr_app a;
     SDL_Window *win = NULL;
-    SDL_AudioDeviceID audio = 0;
+    nr_sdl_audio audio = 0;
     nr_vbackend vb;
+    nr_sysinfo si;
     bool vb_ok = false, running = true, hires_synced = false, paused = false;
     ports pt;
     nr_config *cfg;
@@ -239,7 +235,7 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK) != 0) {
+    if (!nr_sdl_init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD | SDL_INIT_JOYSTICK)) {
         NR_ERR("sdl", "SDL_Init failed: %s", SDL_GetError());
         return 1;
     }
@@ -248,7 +244,7 @@ int main(int argc, char **argv)
         SDL_Quit();
         return start_launcher();
     }
-    if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) NR_WARN("sdl", "audio is not available: %s", SDL_GetError());
+    if (!nr_sdl_init(SDL_INIT_AUDIO)) NR_WARN("sdl", "audio is not available: %s", SDL_GetError());
 
     cfg = nr_config_load(a.opt.config_path);
     nr_port_config_load(&pt.cfg[0], cfg, 0);
@@ -264,7 +260,13 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    vb_ok = open_backend(&win, &a.opt, &vb);
+    {
+        char hw[256];
+        nr_sysinfo_query(&si);
+        nr_sysinfo_describe(&si, hw, sizeof(hw));
+        NR_INFO("system", "%s", hw);
+    }
+    vb_ok = open_backend(&win, &a.opt, &vb, &si);
     if (!vb_ok) {
         show_error("No renderer could be started (see nrengine.log).");
         if (win) SDL_DestroyWindow(win);
@@ -281,15 +283,13 @@ int main(int argc, char **argv)
     nr_path_join(shot_dir, sizeof(shot_dir), nr_data_dir(), "screenshots");
 
     {
-        SDL_AudioSpec want, have;
-        SDL_zero(want);
-        want.freq = 44100;
-        want.format = AUDIO_S16SYS;
-        want.channels = 2;
-        want.samples = 512;
-        if (SDL_WasInit(SDL_INIT_AUDIO)) audio = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+        if (SDL_WasInit(SDL_INIT_AUDIO)) audio = nr_sdl_audio_open();
         if (!audio) NR_WARN("sdl", "no audio output: %s", SDL_GetError());
-        else SDL_PauseAudioDevice(audio, 0);
+        else {
+            const char *drv = SDL_GetCurrentAudioDriver();
+            NR_INFO("audio", "output: %s (driver %s, 44100 Hz stereo)", nr_sdl_audio_device_name(audio), drv ? drv : "unknown");
+            nr_sdl_audio_pause(audio, 0);
+        }
     }
     nr_audio_sync_init(&as, 2205);    /* ~50 ms of queued audio */
     abuf = (s16 *)SDL_malloc(44100 * 4);
@@ -303,7 +303,7 @@ int main(int argc, char **argv)
     while (running && !a.p->halted) {
         SDL_Event ev;
         int i;
-        u32 now = SDL_GetTicks();
+        u32 now = nr_sdl_ticks();
         /* test hook: NRENGINE_TEST_ESC_AT=N presses Esc at frame N, saves the
          * dialog to quit_dialog.png and then confirms the default answer */
         {
@@ -312,7 +312,7 @@ int main(int argc, char **argv)
             if (esc_at >= 0 && (int)a.frame == esc_at && step == 0) {
                 SDL_Event k;
                 memset(&k, 0, sizeof(k));
-                k.type = SDL_KEYDOWN; k.key.keysym.sym = SDLK_ESCAPE; k.key.keysym.scancode = SDL_SCANCODE_ESCAPE;
+                k.type = SDL_EVENT_KEY_DOWN; NR_SDL_KEY(k) = SDLK_ESCAPE; NR_SDL_SCAN(k) = SDL_SCANCODE_ESCAPE;
                 SDL_PushEvent(&k);
                 step = 1;
             } else if (step >= 1 && step < 30 && paused) {
@@ -321,7 +321,7 @@ int main(int argc, char **argv)
                 if (step == 29) {
                     SDL_Event k;
                     memset(&k, 0, sizeof(k));
-                    k.type = SDL_KEYDOWN; k.key.keysym.sym = SDLK_RETURN; k.key.keysym.scancode = SDL_SCANCODE_RETURN;
+                    k.type = SDL_EVENT_KEY_DOWN; NR_SDL_KEY(k) = SDLK_RETURN; NR_SDL_SCAN(k) = SDL_SCANCODE_RETURN;
                     SDL_PushEvent(&k);
                 }
             }
@@ -329,13 +329,12 @@ int main(int argc, char **argv)
         while (SDL_PollEvent(&ev)) {
             nr_ui_key uk = UI_KEY_NONE;
             switch (ev.type) {
-            case SDL_QUIT: running = false; break;
-            case SDL_KEYDOWN: {
-                SDL_Keycode k = ev.key.keysym.sym;
+            case SDL_EVENT_QUIT: running = false; break;
+            case SDL_EVENT_KEY_DOWN: {
+                SDL_Keycode k = NR_SDL_KEY(ev);
                 if (ev.key.repeat) break;
                 if (k == SDLK_F11) {
-                    Uint32 f = SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN_DESKTOP;
-                    SDL_SetWindowFullscreen(win, f ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
+                    nr_sdl_toggle_fullscreen(win);
                 } else if (k == SDLK_F12) {
                     char path[1300];
                     if (!nr_is_dir(shot_dir)) nr_mkdir(shot_dir);
@@ -352,15 +351,15 @@ int main(int argc, char **argv)
                     /* pause the simulation and ask */
                     nr_ui_open_quit(&ui);
                     paused = true;
-                    if (audio) { SDL_PauseAudioDevice(audio, 1); SDL_ClearQueuedAudio(audio); }
+                    if (audio) { nr_sdl_audio_pause(audio, 1); nr_sdl_audio_clear(audio); }
                 }
                 break;
             }
-            case SDL_CONTROLLERBUTTONDOWN:
-                if (paused) uk = map_button(ev.cbutton.button);
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+                if (paused) uk = map_button(NR_SDL_PAD_BUTTON(ev));
                 break;
-            case SDL_JOYDEVICEADDED:
-            case SDL_JOYDEVICEREMOVED:
+            case SDL_EVENT_JOYSTICK_ADDED:
+            case SDL_EVENT_JOYSTICK_REMOVED:
                 ports_open(&pt);
                 break;
             default: break;
@@ -372,7 +371,7 @@ int main(int argc, char **argv)
                     /* resume: restart pacing and audio from now */
                     paused = false;
                     next_tick = SDL_GetPerformanceCounter();
-                    if (audio) SDL_PauseAudioDevice(audio, 0);
+                    if (audio) nr_sdl_audio_pause(audio, 0);
                 }
             }
         }
@@ -386,7 +385,8 @@ int main(int argc, char **argv)
         }
 
         if (!a.nscript) {
-            const Uint8 *ks = SDL_GetKeyboardState(NULL);
+            u8 ks[SDL_SCANCODE_COUNT];
+            nr_sdl_keyboard(ks, sizeof(ks));
             for (i = 0; i < 2; i++) {
                 nr_pad_update(pt.pad[i]);
                 a.pad_pressed[i] = nr_port_read(&pt.cfg[i], pt.pad[i], ks);
@@ -404,9 +404,9 @@ int main(int argc, char **argv)
         /* audio: resampled by a tiny ratio to follow the device clock */
         if (audio) {
             u32 n = spu_pull_audio(a.p, abuf, 44100);
-            u32 queued = SDL_GetQueuedAudioSize(audio) / 4;
+            u32 queued = nr_sdl_audio_queued(audio) / 4;
             u32 m = nr_audio_sync_process(&as, abuf, n, queued, rbuf, 44100);
-            if (m) SDL_QueueAudio(audio, rbuf, m * 4);
+            if (m) nr_sdl_audio_queue(audio, rbuf, m * 4);
         } else {
             spu_pull_audio(a.p, abuf, 44100);
         }
@@ -458,7 +458,7 @@ int main(int argc, char **argv)
          * queue to drain instead of discarding sound. */
         if (audio) {
             int guard = 0;
-            while (SDL_GetQueuedAudioSize(audio) / 4 > as.target * 2 && guard++ < 100) SDL_Delay(1);
+            while (nr_sdl_audio_queued(audio) / 4 > as.target * 2 && guard++ < 100) SDL_Delay(1);
             if (guard > 0) next_tick = SDL_GetPerformanceCounter();
         }
         if (a.opt.frames && (int)a.frame >= a.opt.frames) running = false;
@@ -469,7 +469,7 @@ int main(int argc, char **argv)
     SDL_free(abuf);
     SDL_free(rbuf);
     for (shot = 0; shot < 2; shot++) nr_pad_close(pt.pad[shot]);
-    if (audio) SDL_CloseAudioDevice(audio);
+    if (audio) nr_sdl_audio_close(audio);
     if (vb_ok) vb.shutdown(&vb);
     nr_ui_free(&ui);
     if (win) SDL_DestroyWindow(win);

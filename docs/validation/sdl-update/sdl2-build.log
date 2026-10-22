@@ -1,0 +1,23 @@
+-- Building launcher and frontend with SDL2
+-- Configuring done (0.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /workspace/scratch/d698c4f25270/build-sdl2
+[  3%] Built target nr_font_security
+[ 51%] Built target nrcore
+[ 53%] Built target nrengine_headless
+[ 55%] Built target nrtool
+[ 57%] Building C object CMakeFiles/nrlauncher.dir/src/input/input.c.o
+[ 58%] Building C object CMakeFiles/nrengine.dir/src/input/input.c.o
+[ 60%] Built target nr_atomic_io
+[ 61%] Building C object CMakeFiles/nr_sdl_tests.dir/src/input/input.c.o
+[ 64%] Built target nr_mod_security
+[ 66%] Built target nr_render_security
+[ 69%] Built target nr_config_security
+[ 76%] Built target nrtests
+[ 77%] Building C object CMakeFiles/nr_sdl_tests.dir/tests/test_sdl.c.o
+[ 78%] Linking C executable nrengine
+[ 79%] Linking C executable nrlauncher
+[ 89%] Built target nrengine
+[ 90%] Linking C executable nr_sdl_tests
+[ 98%] Built target nrlauncher
+[100%] Built target nr_sdl_tests

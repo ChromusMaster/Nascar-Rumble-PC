@@ -6,6 +6,8 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <errno.h>
+#include <limits.h>
 #ifndef _WIN32
 #include <dirent.h>
 #include <unistd.h>
@@ -207,6 +209,58 @@ void nr_utf8_args(int *argc, char ***argv)
 #endif
 }
 
+bool nr_safe_relative_path(const char *base, const char *relative)
+{
+    char path[2048];
+    const char *p = relative;
+    size_t len;
+    if (!base || !relative || !*relative || strlen(base) >= sizeof(path)) return false;
+    strcpy(path, base);
+    len = strlen(path);
+    while (*p) {
+        const char *end = strchr(p, '/');
+        size_t n = end ? (size_t)(end-p) : strlen(p), j;
+        if (!n || (n == 1 && *p == '.') || (n == 2 && p[0] == '.' && p[1] == '.') || len + n + 2 >= sizeof(path)) return false;
+        for (j = 0; j < n; j++) if ((unsigned char)p[j] < 32 || strchr("\\:*?\"<>|", p[j])) return false;
+        {
+            char name[256];
+            size_t stem = 0;
+            if (n >= sizeof(name)) return false;
+            while (stem < n && p[stem] != '.') { name[stem] = p[stem]; stem++; }
+            name[stem] = 0;
+            if (nr_strcasecmp(name, "CON") == 0 || nr_strcasecmp(name, "PRN") == 0 ||
+                nr_strcasecmp(name, "AUX") == 0 || nr_strcasecmp(name, "NUL") == 0 || nr_strcasecmp(name, "CLOCK$") == 0 ||
+                (stem == 4 && name[3] >= '1' && name[3] <= '9' &&
+                 ((toupper((unsigned char)name[0]) == 'C' && toupper((unsigned char)name[1]) == 'O' && toupper((unsigned char)name[2]) == 'M') ||
+                  (toupper((unsigned char)name[0]) == 'L' && toupper((unsigned char)name[1]) == 'P' && toupper((unsigned char)name[2]) == 'T')))) return false;
+        }
+        if (p[n-1] == '.' || p[n-1] == ' ') return false;
+        path[len++] = '/';
+        memcpy(path+len, p, n); len += n; path[len] = 0;
+#ifdef _WIN32
+        {
+            wchar_t *w = to_wide(path);
+            DWORD attr = w ? GetFileAttributesW(w) : INVALID_FILE_ATTRIBUTES;
+            DWORD error = GetLastError();
+            free(w);
+            if (attr == INVALID_FILE_ATTRIBUTES) {
+                if (error != ERROR_FILE_NOT_FOUND && error != ERROR_PATH_NOT_FOUND) return false;
+            } else if (attr & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DEVICE)) return false;
+        }
+#else
+        {
+            struct stat st;
+            if (lstat(path, &st) == 0) { if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)) return false; }
+            else if (errno != ENOENT) return false;
+        }
+#endif
+        if (!end) break;
+        p = end+1;
+        if (!*p) return false;
+    }
+    return true;
+}
+
 bool nr_file_exists(const char *path)
 {
 #ifdef _WIN32
@@ -233,24 +287,92 @@ bool nr_is_dir(const char *path)
 #endif
 }
 
-long nr_read_file(const char *path, u8 **out)
+long nr_read_file_limited(const char *path, u8 **out, size_t limit)
 {
     FILE *f = nr_fopen(path, "rb");
     long sz;
     u8 *buf;
     *out = NULL;
     if (!f) return -1;
-    fseek(f, 0, SEEK_END);
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); errno = EIO; return -1; }
     sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz < 0) { fclose(f); return -1; }
+    if (sz < 0 || (unsigned long)sz > limit || fseek(f, 0, SEEK_SET) != 0) { fclose(f); errno = EIO; return -1; }
+#if LONG_MAX >= SIZE_MAX
+    if ((unsigned long)sz >= SIZE_MAX) { fclose(f); errno = EIO; return -1; }
+#endif
     buf = (u8 *)malloc((size_t)sz + 1);
-    if (!buf) { fclose(f); return -1; }
-    if (sz && fread(buf, 1, (size_t)sz, f) != (size_t)sz) { free(buf); fclose(f); return -1; }
+    if (!buf) { fclose(f); errno = ENOMEM; return -1; }
+    if (sz && fread(buf, 1, (size_t)sz, f) != (size_t)sz) { free(buf); fclose(f); errno = EIO; return -1; }
     buf[sz] = 0;
     fclose(f);
     *out = buf;
     return sz;
+}
+
+long nr_read_file(const char *path, u8 **out)
+{
+    return nr_read_file_limited(path, out, SIZE_MAX - 1);
+}
+
+bool nr_write_file_atomic(const char *path, const void *data, size_t len)
+{
+    bool ok = false;
+#ifdef _WIN32
+    wchar_t *dest = to_wide(path), *tmp;
+    size_t n;
+    HANDLE h = INVALID_HANDLE_VALUE;
+    unsigned attempt;
+    if (!dest) return false;
+    n = wcslen(dest);
+    if (n > 32000) { free(dest); return false; }
+    tmp = (wchar_t *)malloc((n + 48) * sizeof(*tmp));
+    if (!tmp) { free(dest); return false; }
+    for (attempt = 0; attempt < 128; attempt++) {
+        swprintf(tmp, n + 48, L"%ls.tmp.%lu.%u", dest, (unsigned long)GetCurrentProcessId(), attempt);
+        h = CreateFileW(tmp, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (h != INVALID_HANDLE_VALUE || GetLastError() != ERROR_FILE_EXISTS) break;
+    }
+    if (h != INVALID_HANDLE_VALUE) {
+        size_t at = 0;
+        ok = true;
+        while (at < len) {
+            DWORD wrote, chunk = (DWORD)((len-at) > 1048576 ? 1048576 : len-at);
+            if (!WriteFile(h, (const char *)data+at, chunk, &wrote, NULL) || wrote != chunk) { ok = false; break; }
+            at += wrote;
+        }
+        if (!FlushFileBuffers(h)) ok = false;
+        if (!CloseHandle(h)) ok = false;
+        if (ok) ok = MoveFileExW(tmp, dest, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+        if (!ok) DeleteFileW(tmp);
+    }
+    free(tmp); free(dest);
+#else
+    size_t n = strlen(path);
+    char *tmp;
+    int fd;
+    FILE *f;
+    struct stat st;
+    bool exists;
+    if (n > SIZE_MAX - 12) return false;
+    exists = lstat(path, &st) == 0;
+    if ((exists && !S_ISREG(st.st_mode)) || (!exists && errno != ENOENT)) return false;
+    tmp = (char *)malloc(n + 12);
+    if (!tmp) return false;
+    memcpy(tmp, path, n);
+    memcpy(tmp+n, ".tmp.XXXXXX", 12);
+    fd = mkstemp(tmp);
+    if (fd < 0) { free(tmp); return false; }
+    if (exists && fchmod(fd, st.st_mode & 0777) != 0) { close(fd); unlink(tmp); free(tmp); return false; }
+    f = fdopen(fd, "wb");
+    if (!f) { close(fd); unlink(tmp); free(tmp); return false; }
+    ok = fwrite(data, 1, len, f) == len;
+    if (fflush(f) != 0 || fsync(fd) != 0) ok = false;
+    if (fclose(f) != 0) ok = false;
+    if (ok) ok = rename(tmp, path) == 0;
+    if (!ok) unlink(tmp);
+    free(tmp);
+#endif
+    return ok;
 }
 
 bool nr_write_file(const char *path, const void *data, size_t len)

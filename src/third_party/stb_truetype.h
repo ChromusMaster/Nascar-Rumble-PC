@@ -2671,6 +2671,7 @@ STBTT_DEF float stbtt_ScaleForMappingEmToPixels(const stbtt_fontinfo *info, floa
 
 STBTT_DEF void stbtt_FreeShape(const stbtt_fontinfo *info, stbtt_vertex *v)
 {
+   (void)info;
    STBTT_free(v, info->userdata);
 }
 
@@ -2769,6 +2770,7 @@ typedef struct stbtt__hheap
 
 static void *stbtt__hheap_alloc(stbtt__hheap *hh, size_t size, void *userdata)
 {
+   (void)userdata;
    if (hh->first_free) {
       void *p = hh->first_free;
       hh->first_free = * (void **) p;
@@ -2796,6 +2798,7 @@ static void stbtt__hheap_free(stbtt__hheap *hh, void *p)
 
 static void stbtt__hheap_cleanup(stbtt__hheap *hh, void *userdata)
 {
+   (void)userdata;
    stbtt__hheap_chunk *c = hh->head;
    while (c) {
       stbtt__hheap_chunk *n = c->next;
@@ -3617,6 +3620,7 @@ static void stbtt__tesselate_cubic(stbtt__point *points, int *num_points, float 
 // returns number of contours
 static stbtt__point *stbtt_FlattenCurves(stbtt_vertex *vertices, int num_verts, float objspace_flatness, int **contour_lengths, int *num_contours, void *userdata)
 {
+   (void)userdata;
    stbtt__point *points=0;
    int num_points=0;
 
@@ -3707,7 +3711,15 @@ STBTT_DEF void stbtt_Rasterize(stbtt__bitmap *result, float flatness_in_pixels, 
 
 STBTT_DEF void stbtt_FreeBitmap(unsigned char *bitmap, void *userdata)
 {
+   (void)userdata;
    STBTT_free(bitmap, userdata);
+}
+
+static int stbtt__safe_bitmap_size(int w, int h, size_t *bytes)
+{
+   if (w <= 0 || h <= 0 || w > 16384 || h > 16384 || (size_t)w > (size_t)-1 / (size_t)h) return 0;
+   *bytes = (size_t)w * (size_t)h;
+   return *bytes <= 64u * 1024u * 1024u;
 }
 
 STBTT_DEF unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info, float scale_x, float scale_y, float shift_x, float shift_y, int glyph, int *width, int *height, int *xoff, int *yoff)
@@ -3715,7 +3727,13 @@ STBTT_DEF unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info
    int ix0,iy0,ix1,iy1;
    stbtt__bitmap gbm;
    stbtt_vertex *vertices;
-   int num_verts = stbtt_GetGlyphShape(info, glyph, &vertices);
+   size_t bytes;
+   int num_verts;
+   if (width) *width = 0;
+   if (height) *height = 0;
+   if (!info || !(scale_x >= 0 && scale_x <= 16) || !(scale_y >= 0 && scale_y <= 16) ||
+       !(shift_x >= -1048576 && shift_x <= 1048576) || !(shift_y >= -1048576 && shift_y <= 1048576)) return NULL;
+   num_verts = stbtt_GetGlyphShape(info, glyph, &vertices);
 
    if (scale_x == 0) scale_x = scale_y;
    if (scale_y == 0) {
@@ -3738,8 +3756,8 @@ STBTT_DEF unsigned char *stbtt_GetGlyphBitmapSubpixel(const stbtt_fontinfo *info
    if (xoff  ) *xoff   = ix0;
    if (yoff  ) *yoff   = iy0;
 
-   if (gbm.w && gbm.h) {
-      gbm.pixels = (unsigned char *) STBTT_malloc(gbm.w * gbm.h, info->userdata);
+   if (stbtt__safe_bitmap_size(gbm.w, gbm.h, &bytes)) {
+      gbm.pixels = (unsigned char *) STBTT_malloc(bytes, info->userdata);
       if (gbm.pixels) {
          gbm.stride = gbm.w;
 
@@ -3819,10 +3837,14 @@ static int stbtt_BakeFontBitmap_internal(unsigned char *data, int offset,  // fo
    float scale;
    int x,y,bottom_y, i;
    stbtt_fontinfo f;
+   size_t bytes;
+   if (!data || !pixels || !chardata || offset < 0 || first_char < 0 || num_chars < 0 ||
+       first_char > 0x10FFFF || num_chars > 0x110000 - first_char ||
+       !(pixel_height > 0 && pixel_height <= 4096) || !stbtt__safe_bitmap_size(pw, ph, &bytes)) return -1;
    f.userdata = NULL;
    if (!stbtt_InitFont(&f, data, offset))
       return -1;
-   STBTT_memset(pixels, 0, pw*ph); // background of 0 around pixels
+   STBTT_memset(pixels, 0, bytes); // background of 0 around pixels
    x=y=1;
    bottom_y = 1;
 
@@ -3956,9 +3978,18 @@ static void stbrp_pack_rects(stbrp_context *con, stbrp_rect *rects, int num_rect
 
 STBTT_DEF int stbtt_PackBegin(stbtt_pack_context *spc, unsigned char *pixels, int pw, int ph, int stride_in_bytes, int padding, void *alloc_context)
 {
-   stbrp_context *context = (stbrp_context *) STBTT_malloc(sizeof(*context)            ,alloc_context);
-   int            num_nodes = pw - padding;
-   stbrp_node    *nodes   = (stbrp_node    *) STBTT_malloc(sizeof(*nodes  ) * num_nodes,alloc_context);
+   stbrp_context *context;
+   stbrp_node *nodes;
+   int num_nodes, row;
+   size_t bytes;
+   if (!spc || !stbtt__safe_bitmap_size(pw, ph, &bytes) || padding < 0 || padding >= pw || padding >= ph ||
+       stride_in_bytes < 0 || (stride_in_bytes && stride_in_bytes < pw)) return 0;
+   if (!stride_in_bytes) stride_in_bytes = pw;
+   if ((size_t)stride_in_bytes > (64u * 1024u * 1024u) / (size_t)ph) return 0;
+   num_nodes = pw - padding;
+   if ((size_t)num_nodes > (size_t)-1 / sizeof(*nodes)) return 0;
+   context = (stbrp_context *) STBTT_malloc(sizeof(*context), alloc_context);
+   nodes = (stbrp_node *) STBTT_malloc(sizeof(*nodes) * (size_t)num_nodes, alloc_context);
 
    if (context == NULL || nodes == NULL) {
       if (context != NULL) STBTT_free(context, alloc_context);
@@ -3981,7 +4012,7 @@ STBTT_DEF int stbtt_PackBegin(stbtt_pack_context *spc, unsigned char *pixels, in
    stbrp_init_target(context, pw-padding, ph-padding, nodes, num_nodes);
 
    if (pixels)
-      STBTT_memset(pixels, 0, pw*ph); // background of 0 around pixels
+      for (row = 0; row < ph; row++) STBTT_memset(pixels + (size_t)row * (size_t)stride_in_bytes, 0, (size_t)pw); // background of 0 around pixels
 
    return 1;
 }
@@ -4579,7 +4610,11 @@ STBTT_DEF unsigned char * stbtt_GetGlyphSDF(const stbtt_fontinfo *info, float sc
    int w,h;
    unsigned char *data;
 
-   if (scale == 0) return NULL;
+   size_t bytes;
+   if (width) *width = 0;
+   if (height) *height = 0;
+   if (!info || !(scale > 0 && scale <= 16) || padding < 0 || padding > 16384 ||
+       !(pixel_dist_scale >= -1048576 && pixel_dist_scale <= 1048576)) return NULL;
 
    stbtt_GetGlyphBitmapBoxSubpixel(info, glyph, scale, scale, 0.0f,0.0f, &ix0,&iy0,&ix1,&iy1);
 
@@ -4594,6 +4629,7 @@ STBTT_DEF unsigned char * stbtt_GetGlyphSDF(const stbtt_fontinfo *info, float sc
 
    w = (ix1 - ix0);
    h = (iy1 - iy0);
+   if (!stbtt__safe_bitmap_size(w, h, &bytes)) return NULL;
 
    if (width ) *width  = w;
    if (height) *height = h;
@@ -4610,8 +4646,17 @@ STBTT_DEF unsigned char * stbtt_GetGlyphSDF(const stbtt_fontinfo *info, float sc
       float *precompute;
       stbtt_vertex *verts;
       int num_verts = stbtt_GetGlyphShape(info, glyph, &verts);
-      data = (unsigned char *) STBTT_malloc(w * h, info->userdata);
-      precompute = (float *) STBTT_malloc(num_verts * sizeof(float), info->userdata);
+      if (num_verts <= 0 || num_verts > 1048576 || (size_t)num_verts > (size_t)-1 / sizeof(float)) {
+         STBTT_free(verts, info->userdata); return NULL;
+      }
+      data = (unsigned char *) STBTT_malloc(bytes, info->userdata);
+      precompute = (float *) STBTT_malloc((size_t)num_verts * sizeof(float), info->userdata);
+      if (!data || !precompute) {
+         STBTT_free(data, info->userdata);
+         STBTT_free(precompute, info->userdata);
+         STBTT_free(verts, info->userdata);
+         return NULL;
+      }
 
       for (i=0,j=num_verts-1; i < num_verts; j=i++) {
          if (verts[i].type == STBTT_vline) {
@@ -4766,6 +4811,7 @@ STBTT_DEF unsigned char * stbtt_GetCodepointSDF(const stbtt_fontinfo *info, floa
 
 STBTT_DEF void stbtt_FreeSDF(unsigned char *bitmap, void *userdata)
 {
+   (void)userdata;
    STBTT_free(bitmap, userdata);
 }
 

@@ -12,11 +12,16 @@
 #include "../src/app/app.h"
 #include "../src/app/audio_sync.h"
 #include "../src/render/swr.h"
+#include "../src/render/pgxp.h"
+#include "../src/render/gfx.h"
 #include "../src/disc/discsel.h"
 #include "../src/mods/mods.h"
 #include "../src/input/hidparse.h"
 #include "../src/common/proc.h"
+#include "../src/launcher/ltext.h"
+#include "../src/launcher/l10n.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,8 +46,8 @@ static int g_pass, g_fail, g_skip;
 /* ---------------------------------------------------------------- helpers */
 
 /* tiny MIPS encoders for test programs */
-#define R_(op, rs, rt, rd, sa, fn) ((u32)(((op) << 26) | ((rs) << 21) | ((rt) << 16) | ((rd) << 11) | ((sa) << 6) | (fn)))
-#define I_(op, rs, rt, imm) ((u32)(((op) << 26) | ((rs) << 21) | ((rt) << 16) | ((u32)(imm) & 0xFFFF)))
+#define R_(op, rs, rt, rd, sa, fn) ((u32)(((u32)(op) << 26) | ((u32)(rs) << 21) | ((u32)(rt) << 16) | ((u32)(rd) << 11) | ((u32)(sa) << 6) | (fn)))
+#define I_(op, rs, rt, imm) ((u32)(((u32)(op) << 26) | ((u32)(rs) << 21) | ((u32)(rt) << 16) | ((u32)(imm) & 0xFFFF)))
 #define ADDIU(rt, rs, imm) I_(9, rs, rt, imm)
 #define ORI(rt, rs, imm) I_(13, rs, rt, imm)
 #define LUI(rt, imm) I_(15, 0, rt, imm)
@@ -465,6 +470,31 @@ static void test_misc(void)
     }
 }
 
+static void test_launcher_font(void)
+{
+    char latin1[192 * 2 + 1];
+    int i, n = 0, l, id;
+    fprintf(stderr, "[launcher font]\n");
+    for (i = 0x20; i < 0x7F; i++) latin1[n++] = (char)i;
+    for (i = 0xA0; i < 0x100; i++) { latin1[n++] = (char)(0xC0 | (i >> 6)); latin1[n++] = (char)(0x80 | (i & 0x3F)); }
+    latin1[n] = 0;
+    CHECK(lt_builtin_covers(latin1));
+    CHECK(lt_builtin_covers("\xE2\x80\x98\xE2\x80\x99\xE2\x80\x9C\xE2\x80\x9D\xE2\x80\xA6\xE2\x80\x93\xE2\x80\x94\xE2\x82\xAC"));
+    CHECK(!lt_builtin_covers("\xE6\x97\xA5"));
+    for (l = 0; l < l10n_count(); l++) {
+        const l10n_lang *lang = l10n_get(l);
+        if (lang->script != LT_LATIN) continue;
+        l10n_set(l);
+        for (id = 0; id < S_COUNT; id++)
+            if (!lt_builtin_covers(T(id))) { fprintf(stderr, "  %s string %d not covered\n", lang->code, id); CHECK(0); }
+    }
+    l10n_set(0);
+    CHECK(lt_init());
+    CHECK(strncmp(lt_font_info(), "built-in NREngine Sans", 22) == 0);
+    CHECK(lt_width(20, "Configura\xC3\xA7\xC3\xB5" "es") > lt_width(20, "Configura"));
+    CHECK_EQ(lt_line_height(20), 26);
+    lt_shutdown();
+}
 
 /* ---------------------------------------------------------------- audio sync */
 
@@ -494,6 +524,12 @@ static void test_audio_sync(void)
     k = (int)nr_audio_sync_process(&s, in, 735, 2048, out, 1600);
     CHECK(k > 700);
     CHECK(out[200] >= out[198] && out[201] <= out[199]);
+    nr_audio_sync_init(&s, 2048);
+    CHECK_EQ(nr_audio_sync_process(&s, in, 735, 2048, out, 1), 1);
+    CHECK(s.pos >= -1.0 && s.dropped > 0);
+    CHECK(nr_audio_sync_process(&s, in, 735, 2048, out, 1600) > 700);
+    CHECK_EQ(nr_audio_sync_process(&s, in, 735, 2048, NULL, 0), 0);
+    CHECK(s.pos >= -1.0);
 }
 
 /* ------------------------------------------------- enhanced renderer (swr) */
@@ -953,6 +989,127 @@ static void test_data(bool update_golden)
     }
 }
 
+static void test_external_catalog(void)
+{
+    const char *catalog = "[strings]\nS_BTN_PLAY = Start custom\nS_STATUS_BAD = Unsafe %n\nS_BTN_QUIT = Exit custom\nS_BTN_QUIT = Duplicate\nS_BTN_SAVE = \xC0\xAF\nUNKNOWN = Ignore\n";
+    int lang = l10n_find("en-CA");
+    CHECK(nr_write_file("nrtest-catalog.ini", catalog, strlen(catalog)));
+    CHECK(l10n_load_catalog(lang, "nrtest-catalog.ini"));
+    l10n_set(lang);
+    CHECK(strcmp(T(S_BTN_PLAY), "Start custom") == 0);
+    CHECK(strcmp(T(S_BTN_QUIT), "Exit custom") == 0);
+    CHECK(strstr(T(S_STATUS_BAD), "%s") != NULL);
+    CHECK(strcmp(T(S_BTN_SAVE), "Save") == 0);
+    l10n_set(0);
+    remove("nrtest-catalog.ini");
+}
+
+static void test_gfx_budget(void)
+{
+    nr_gfx_settings g, tmp;
+    const nr_gfx_settings *r;
+    const u64 mib = 1024u * 1024u;
+    fprintf(stderr, "[gfx budget]\n");
+    CHECK_EQ(nr_gfx_memory_scale_limit(0, 3), 16);
+    CHECK_EQ(nr_gfx_memory_scale_limit(4096u * mib, 3), 16);
+    CHECK_EQ(nr_gfx_memory_scale_limit(512u * mib, 3), 9);
+    CHECK_EQ(nr_gfx_memory_scale_limit(64u * mib, 3), 3);
+    CHECK_EQ(nr_gfx_memory_scale_limit(1u * mib, 3), 1);
+    CHECK_EQ(nr_gfx_render_budget(8192u * mib, 1024u * mib, true), 512u * mib);
+    CHECK_EQ(nr_gfx_render_budget(8192u * mib, 0, false), 2048u * mib);
+    nr_gfx_defaults(&g);
+    g.internal_scale = 8; g.antialias = 16;
+    nr_gfx_set_memory_scale_limit(9);
+    r = nr_gfx_fit(&g, 16, &tmp);
+    CHECK(r == &tmp);
+    CHECK_EQ(tmp.internal_scale, 8);
+    CHECK_EQ(tmp.antialias, 1);
+    nr_gfx_set_memory_scale_limit(4);
+    r = nr_gfx_fit(&g, 16, &tmp);
+    CHECK_EQ(r->internal_scale, 4);
+    CHECK_EQ(r->antialias, 1);
+    nr_gfx_set_memory_scale_limit(16);
+    g.internal_scale = 2; g.antialias = 4;
+    CHECK(nr_gfx_fit(&g, 16, &tmp) == &g);
+}
+
+static void test_pgxp(void)
+{
+    nr_pgxp *c = (nr_pgxp *)calloc(1, sizeof(nr_pgxp));
+    float x, y, w;
+    fprintf(stderr, "[pgxp]\n");
+    CHECK(c != NULL);
+    if (!c) return;
+    nr_pgxp_store(c, 0x00100020u, 32.25f, 16.5f, 1000.0f);
+    CHECK(nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    CHECK(x == 32.25f && y == 16.5f && w == 1000.0f);
+    CHECK(!nr_pgxp_lookup(c, 0x00100021u, &x, &y, &w));
+    nr_pgxp_store(c, 0x00100020u, 32.3f, 16.4f, 1010.0f);
+    CHECK(nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    nr_pgxp_store(c, 0x00100020u, 32.1f, 16.2f, 3000.0f);
+    CHECK(!nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    CHECK_EQ(c->conflicts, 1);
+    nr_pgxp_tick(c);
+    nr_pgxp_store(c, 0x00100020u, 32.0f, 16.0f, 500.0f);
+    CHECK(nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    CHECK(w == 500.0f);
+    nr_pgxp_tick(c); nr_pgxp_tick(c);
+    CHECK(nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    nr_pgxp_tick(c);
+    CHECK(!nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    CHECK_EQ(c->expired, 1);
+    free(c);
+}
+
+static float color_hue_ratio(const float c[3]) { float r = nr_gfx_srgb_to_linear(c[0]); return r > 0.0f ? nr_gfx_srgb_to_linear(c[1]) / r : 0.0f; }
+
+static void test_color(void)
+{
+    nr_gfx_tonemap t;
+    float c[3];
+    int i;
+    fprintf(stderr, "[color]\n");
+    for (i = 0; i <= 255; i++) {
+        float v = (float)i / 255.0f;
+        CHECK(fabsf(nr_gfx_linear_to_srgb(nr_gfx_srgb_to_linear(v)) - v) < 0.0005f);
+    }
+    for (t = GFX_TM_REINHARD; t < GFX_TM_COUNT; t = (nr_gfx_tonemap)(t + 1)) {
+        float prev = -1.0f, y0, y1;
+        c[0] = c[1] = c[2] = 1.0f; nr_gfx_tonemap_pixel(t, c);
+        CHECK(c[0] > 0.999f && c[1] > 0.999f && c[2] > 0.999f);
+        c[0] = c[1] = c[2] = 0.0f; nr_gfx_tonemap_pixel(t, c);
+        CHECK(c[0] == 0.0f && c[1] == 0.0f && c[2] == 0.0f);
+        for (i = 0; i <= 64; i++) {
+            c[0] = c[1] = c[2] = (float)i / 64.0f;
+            nr_gfx_tonemap_pixel(t, c);
+            CHECK(c[0] >= prev - 0.00001f);
+            CHECK(fabsf(c[0] - c[1]) < 0.0001f && fabsf(c[1] - c[2]) < 0.0001f);
+            prev = c[0];
+        }
+        c[0] = 1.0f; c[1] = 0.8f; c[2] = 0.0f;
+        y0 = color_hue_ratio(c);
+        nr_gfx_tonemap_pixel(t, c);
+        y1 = color_hue_ratio(c);
+        CHECK(c[0] <= 1.0f && c[1] <= 1.0f && c[2] >= 0.0f);
+        CHECK(fabsf(y1 - y0) < 0.08f);
+        c[0] = 0.08f; c[1] = 0.06f; c[2] = 0.10f;
+        nr_gfx_tonemap_pixel(t, c);
+        CHECK(c[0] > 0.02f && c[2] > 0.03f);
+    }
+    c[0] = c[1] = c[2] = 0.5f;
+    nr_gfx_color_grade(c, 1.0f);
+    CHECK(fabsf((0.2126f * nr_gfx_srgb_to_linear(c[0]) + 0.7152f * nr_gfx_srgb_to_linear(c[1]) + 0.0722f * nr_gfx_srgb_to_linear(c[2])) - nr_gfx_srgb_to_linear(0.5f)) < 0.002f);
+    c[0] = 1.0f; c[1] = 0.85f; c[2] = 0.0f;
+    nr_gfx_color_grade(c, 1.0f);
+    CHECK(c[0] <= 1.0f && c[1] <= 1.0f && c[1] > 0.75f);
+    c[0] = 0.0f; c[1] = 0.9f; c[2] = 0.9f;
+    nr_gfx_color_grade(c, 1.0f);
+    CHECK(c[1] <= 1.0f && c[2] <= 1.0f && fabsf(c[1] - c[2]) < 0.15f);
+    c[0] = c[1] = c[2] = 0.3f;
+    nr_gfx_color_grade(c, 0.0f);
+    CHECK(fabsf(c[0] - 0.3f) < 0.001f && fabsf(c[1] - 0.3f) < 0.001f && fabsf(c[2] - 0.3f) < 0.001f);
+}
+
 int main(int argc, char **argv)
 {
     bool update = argc > 1 && strcmp(argv[1], "--update-golden") == 0;
@@ -965,10 +1122,15 @@ int main(int argc, char **argv)
     test_bs();
     test_adpcm();
     test_disc();
+    test_external_catalog();
     test_misc();
+    test_launcher_font();
     test_hle();
     test_audio_sync();
     test_swr();
+    test_color();
+    test_pgxp();
+    test_gfx_budget();
     test_discsel();
     test_hid();
     test_session();

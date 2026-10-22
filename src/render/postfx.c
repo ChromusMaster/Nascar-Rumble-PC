@@ -79,20 +79,6 @@ static inline float hash_noise(u32 x, u32 y, u32 f)
     return (float)(h & 0xFFFF) / 65535.0f - 0.5f;
 }
 
-static void color_grade(float c[3], float k)
-{
-    float g[3];
-    int i;
-    g[0] = c[0] * 1.06f + 0.00f * (1 - c[0]);
-    g[1] = c[1] * 1.00f + 0.01f * (1 - c[1]);
-    g[2] = c[2] * 0.94f + 0.04f * (1 - c[2]);
-    for (i = 0; i < 3; i++) c[i] = c[i] + (g[i] - c[i]) * k;
-    {
-        float l = 0.299f * c[0] + 0.587f * c[1] + 0.114f * c[2];
-        for (i = 0; i < 3; i++) c[i] = l + (c[i] - l) * (1.0f + 0.12f * k);
-    }
-}
-
 static void pixel(const job *j, int x, int y, float c[3])
 {
     const nr_gfx_settings *s = j->s;
@@ -129,7 +115,7 @@ static void pixel(const job *j, int x, int y, float c[3])
         }
         break;
     }
-    case GFX_FX_COLOR_GRADE: color_grade(c, k); break;
+    case GFX_FX_COLOR_GRADE: nr_gfx_color_grade(c, k); break;
     case GFX_FX_FILM_GRAIN: {
         float n = hash_noise((u32)x, (u32)y, j->frame) * 0.12f * k;
         for (i = 0; i < 3; i++) c[i] += n;
@@ -137,7 +123,7 @@ static void pixel(const job *j, int x, int y, float c[3])
     }
     case GFX_FX_CINEMATIC: {
         float n = hash_noise((u32)x, (u32)y, j->frame) * 0.06f * k;
-        color_grade(c, k);
+        nr_gfx_color_grade(c, k);
         for (i = 0; i < 3; i++) c[i] += n;
         break;
     }

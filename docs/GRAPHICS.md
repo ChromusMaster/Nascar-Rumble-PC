@@ -36,7 +36,7 @@ widescreen). The implementation is this engine's own.
 | `aspect` | `4:3`, `stretch`, `16:9` | picture proportion in the window |
 | `post_fx` | `off`, `crt`, `scanlines`, `vignette`, `colorgrade`, `grain`, `sharpen`, `cinematic` | post-processing effect |
 | `post_fx_strength` | 0–1 | effect strength |
-| `tonemap` | `off`, `reinhard`, `aces`, `filmic` | tone curve |
+| `tonemap` | `off`, `reinhard`, `aces`, `filmic` | tone curve applied to luminance in linear light (see "Tone mapping and grading") |
 | `brightness`, `contrast`, `saturation`, `gamma` | −1..1, 0.5..1.5, 0..2, 0.5..2 | picture adjustment |
 | `vsync` | 0/1 | vertical sync |
 | `pgxp` | 0/1 | **experimental**: sub-pixel vertex precision and perspective-correct textures |
@@ -47,6 +47,48 @@ widescreen). The implementation is this engine's own.
 The grading/tone-mapping formulas are the same in the software renderer and in
 the shaders (`src/render/gfx.c`, `src/platform/gl_shaders.h`,
 `src/platform/win32/d3d_shaders.h`).
+
+### Tone mapping and grading
+
+The console produces a standard-range picture; it has no highlights above
+white for a tone curve to compress. The tone curves are therefore used as
+look curves, with these rules (0.3.3):
+
+- the picture is converted from sRGB to linear light, the curve is applied to
+  the luminance (BT.709 weights) and the colour is scaled by the luminance
+  ratio, so hues do not shift;
+- every curve is normalised so black stays black and white stays white;
+- the scale is limited so the largest channel never exceeds 1, so saturated
+  yellow, orange and cyan keep their saturation instead of clipping;
+- exposure: Reinhard 1.0, ACES (Narkowicz fit) 1.2, filmic (Hable) 2.0.
+
+ACES and filmic are S-curves: they darken the darkest tones and brighten the
+middle. That is their nature, not a defect. For the console's look keep
+`tonemap = off`.
+
+`colorgrade` and `cinematic` apply a warm white balance that keeps the
+luminance of every pixel, plus a vibrance boost (up to 15 % × strength) that
+is smaller for colours that are already saturated, and are fitted back into
+the displayable range by moving towards grey instead of clipping a channel.
+
+Before 0.3.3 the curves were applied per channel to the gamma-encoded picture:
+white came out at 75 % (ACES), dark tones were crushed, saturated colours
+shifted hue and clipped, and `cinematic` raised saturation by 12 % with hard
+clipping.
+
+### Memory limit
+
+Internal resolution × anti-aliasing grid is limited by the detected memory as
+well as by the renderer (`src/platform/sysinfo.c`, `nr_gfx_fit`). The engine
+and the launcher read the installed RAM, the CPU thread count and, on Windows
+(DXGI) and on Linux with `amdgpu`, the dedicated memory of the graphics card.
+GPU renderers may use half of the dedicated video memory for the three
+high-resolution VRAM copies; the software renderer may use a quarter of the
+RAM for its two copies. One copy at factor F per axis takes
+1024·F × 512·F × 4 bytes (F = 16 → 512 MiB). The launcher only offers the
+combinations that fit; the engine logs the detected hardware and any
+reduction. When the video memory cannot be read (NVIDIA or Intel on Linux)
+only the renderer limit applies.
 
 ### Resolution × anti-aliasing limit
 
@@ -137,6 +179,15 @@ Known limitations of the enhanced renderers:
   it, but it was not proven that it never does;
 - 24-bit with dithering off gives smoother gradients than the console — that
   is the intended enhancement, but it is not the original picture;
+- PGXP: entries of the precision cache are valid for two display flips; a
+  screen position computed twice in the same frame with depths that differ by
+  more than 2 % (or 1 unit) is marked ambiguous and not used, because the
+  cache cannot tell which polygon the game meant. Before 0.3.3 stale entries
+  from earlier frames and the last of several conflicting depths were used,
+  which gave wrong perspective to some polygons (textures flickering or
+  sliding over each other). The log shows hits, misses, conflicts and expired
+  entries on exit. In a 5 600-frame race at 8× the old cache would have used
+  about 111 000 conflicting and 17 500 stale entries;
 - PGXP: when a vertex is not found in the precision cache the polygon uses the
   console's integer position (no cracks) and no perspective;
 - widescreen compresses the GTE's horizontal projection. The game still culls

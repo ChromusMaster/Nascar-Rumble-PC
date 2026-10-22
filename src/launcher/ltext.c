@@ -1,4 +1,5 @@
 #include "ltext.h"
+#include "lfont.h"
 #include "../ui/font.h"
 
 #include <stdio.h>
@@ -34,6 +35,7 @@ typedef struct {
     char path[512];
     int index;
     bool ok;
+    bool builtin;
 } lt_font;
 
 typedef struct {
@@ -53,19 +55,51 @@ static lt_script g_script = LT_LATIN;
 
 /* ------------------------------------------------------------ font files */
 
+static u32 font_be32(const u8 *p)
+{
+    return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3];
+}
+
 static bool load_font(lt_font *f, const char *path, int index)
 {
-    u8 *d;
-    long n = nr_read_file(path, &d);
-    int off;
-    if (n <= 0) return false;
-    off = stbtt_GetFontOffsetForIndex(d, index);
-    if (off < 0 || !stbtt_InitFont(&f->info, d, off)) { free(d); return false; }
+    u8 *d = NULL;
+    long n = nr_read_file_limited(path, &d, 64u * 1024u * 1024u);
+    u32 offset = 0, count, i;
+    if (n < 12 || index < 0) { free(d); return false; }
+    if (memcmp(d, "ttcf", 4) == 0) {
+        count = font_be32(d+8);
+        if ((u32)index >= count || count > ((size_t)n-12)/4) { free(d); return false; }
+        offset = font_be32(d+12+(size_t)index*4);
+    } else if (index != 0) { free(d); return false; }
+    if (offset > (size_t)n-12) { free(d); return false; }
+    count = ((u32)d[offset+4] << 8) | d[offset+5];
+    if (count > 4096 || count > ((size_t)n-offset-12)/16) { free(d); return false; }
+    for (i = 0; i < count; i++) {
+        const u8 *table = d + offset + 12 + (size_t)i*16;
+        u32 at = font_be32(table+8), len = font_be32(table+12);
+        if (at > (size_t)n || len > (size_t)n-at) { free(d); return false; }
+    }
+    if (!stbtt_InitFont(&f->info, d, (int)offset)) { free(d); return false; }
     f->data = d;
     f->index = index;
     nr_strlcpy(f->path, path, sizeof(f->path));
     f->ok = true;
     return true;
+}
+
+static void add_builtin(void)
+{
+    lt_font *f = &g_font[g_nfonts];
+    int off;
+    if (g_nfonts >= MAX_FONTS || lt_builtin_font_size < 12) return;
+    off = stbtt_GetFontOffsetForIndex(lt_builtin_font, 0);
+    if (off < 0 || !stbtt_InitFont(&f->info, lt_builtin_font, off)) { memset(f, 0, sizeof(*f)); return; }
+    f->data = NULL;
+    f->index = 0;
+    nr_strlcpy(f->path, "built-in NREngine Sans", sizeof(f->path));
+    f->ok = true;
+    f->builtin = true;
+    g_nfonts++;
 }
 
 static void free_fonts(void)
@@ -252,7 +286,8 @@ static void update_info(void)
     g_info[0] = 0;
     for (i = 0; i < g_nfonts; i++) {
         char t[600];
-        snprintf(t, sizeof(t), "%s%s#%d", i ? ", " : "", g_font[i].path, g_font[i].index);
+        if (g_font[i].builtin) snprintf(t, sizeof(t), "%s%s", i ? ", " : "", g_font[i].path);
+        else snprintf(t, sizeof(t), "%s%s#%d", i ? ", " : "", g_font[i].path, g_font[i].index);
         strncat(g_info, t, sizeof(g_info) - strlen(g_info) - 1);
     }
     if (!g_nfonts) nr_strlcpy(g_info, "built-in 8x8 bitmap font", sizeof(g_info));
@@ -261,6 +296,7 @@ static void update_info(void)
 bool lt_init(void)
 {
     free_fonts();
+    add_builtin();
     load_latin();
     update_info();
     return g_nfonts > 0;
@@ -278,6 +314,7 @@ bool lt_set_script(lt_script s)
 {
     bool ok;
     free_fonts();
+    add_builtin();
     load_latin();
     ok = load_cjk(s);
     g_script = ok ? s : LT_LATIN;
@@ -421,3 +458,15 @@ int lt_draw(lt_surface *s, int x, int y, int px, u32 rgba, const char *t)
 }
 
 int lt_width(int px, const char *t) { return lt_draw(NULL, 0, 0, px, 0, t); }
+
+bool lt_builtin_covers(const char *t)
+{
+    stbtt_fontinfo info;
+    int off = stbtt_GetFontOffsetForIndex(lt_builtin_font, 0);
+    if (off < 0 || !stbtt_InitFont(&info, lt_builtin_font, off)) return false;
+    while (*t) {
+        u32 cp = next_cp(&t);
+        if (cp >= 0x20 && !stbtt_FindGlyphIndex(&info, (int)cp)) return false;
+    }
+    return true;
+}

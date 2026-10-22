@@ -8,8 +8,12 @@
  * anti-aliasing step) and presented with the scaling filters, effects and
  * colour grading. GL entry points are resolved through SDL_GL_GetProcAddress,
  * so no GL loader library is needed. */
-#include <SDL.h>
+#include "../nr_sdl.h"
+#ifdef NR_SDL3
+#include <SDL3/SDL_opengl.h>
+#else
 #include <SDL_opengl.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -388,7 +392,7 @@ static bool gl_init(nr_vbackend *b, void *window, const nr_gfx_settings *s, char
     nr_gpu_replay_init(&d->rp);
     d->ops.ctx = d;
     d->ops.draw = op_draw; d->ops.upload = op_upload; d->ops.fill = op_fill; d->ops.copy = op_copy; d->ops.refresh = op_refresh;
-    SDL_GL_GetDrawableSize(d->win, &d->win_w, &d->win_h);
+    nr_sdl_gl_size(d->win, &d->win_w, &d->win_h);
     if (!gl_configure(b, nr_gfx_fit(s, b->max_vram_scale, &fit))) { snprintf(err, n, "initial settings not supported (texture size limit %d)", d->max_tex); return false; }
     return true;
 }
@@ -464,7 +468,7 @@ static void gl_present(nr_vbackend *b, const nr_vpresent *p)
     glb *d = (glb *)b->impl;
     GLuint src = 0;
     int sw = 0, sh = 0, x, y, w, h;
-    SDL_GL_GetDrawableSize(d->win, &d->win_w, &d->win_h);
+    nr_sdl_gl_size(d->win, &d->win_w, &d->win_h);
     if (p->use_hires && p->display && !p->display->rgb24) {
         int ow = (p->display->width > 0 ? p->display->width : 320) * d->S, oh = (p->display->height > 0 ? p->display->height : 240) * d->S;
         if (p->display->enabled && t_make(d, &d->internal, ow, oh, true)) {
@@ -517,7 +521,7 @@ static void gl_shutdown(nr_vbackend *b)
             if (d->vbo) GL.DeleteBuffers(1, &d->vbo);
             if (d->vao) GL.DeleteVertexArrays(1, &d->vao);
         }
-        SDL_GL_DeleteContext(d->ctx);
+        SDL_GL_DestroyContext(d->ctx);
     }
     nr_gpu_replay_free(&d->rp);
     free(d);

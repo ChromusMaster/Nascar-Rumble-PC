@@ -1,0 +1,77 @@
+{
+  "baseline": "Nascar-Rumble-PC(1).zip",
+  "baseline_sha256": "c9f5197246643d34fac9fba5dd389e931e5822b18d00627a2c14e581e3ffe1a5",
+  "existing_markdown_files_unchanged": 15,
+  "new_source_comments": 0,
+  "modified_existing_files": [
+    {
+      "path": "CMakeLists.txt",
+      "original_sha256": "69ba003b32a21b8cf2c441402f0702faf14912154186499bd5bf75e10da6965d",
+      "updated_sha256": "4f62e0d9cb267949dbc563a8c3685a0f2d158f51f69495ccea08db64d39ea74c"
+    },
+    {
+      "path": "src/app/audio_sync.c",
+      "original_sha256": "b53b4f2394c68af3ae638c8c37e5d9e7e38862e68bab2a5d6f54b66218cbf75d",
+      "updated_sha256": "c0966d01a65ab937b80c5702b189a83e9ccda1d27c3000e274f8f9dee47b17dc"
+    },
+    {
+      "path": "src/common/common.c",
+      "original_sha256": "5f417b77642d3a5446ee12d8cb458767877b1ab76c6d7710451fb34b3cd7003f",
+      "updated_sha256": "7cbc609a9e24885d0cbd6dcc5dfd155ac4a7a63289a2132c3d1b252a88d67263"
+    },
+    {
+      "path": "src/common/common.h",
+      "original_sha256": "797246de0c7cca3a494976f70d1149261bd6547647aca914e7e2e2d117f12303",
+      "updated_sha256": "cb6eb67de82124c523a3b6d01bf81fbc14d60909b920301ed5c2b801852283b5"
+    },
+    {
+      "path": "src/common/config.c",
+      "original_sha256": "9e95f93d9feac40393171350fa142016b3e74eef630cb23ecd9728c60100fb2e",
+      "updated_sha256": "c4e01d2000906f128a978fafbf9cd15c6b5963c4a734454770734c348cc4c8cb"
+    },
+    {
+      "path": "src/launcher/l10n.c",
+      "original_sha256": "b66f05bc5ea76aae80ba8249dfb0cc10bbc6d034c7065d32013fdb4934359a9c",
+      "updated_sha256": "4be8eb693f8921529a9078c54f06e8faa0ee1ab4edc144290dd4882867687d79"
+    },
+    {
+      "path": "src/launcher/l10n.h",
+      "original_sha256": "d3492a50e9e83a38f8ac6765b3a6476264e32aa091dd42e33898525638affbc9",
+      "updated_sha256": "8c30bcc2f6a05fd88278669c4806365da0dcc62a0429774fcaf3896fb114ebc1"
+    },
+    {
+      "path": "src/launcher/ltext.c",
+      "original_sha256": "d4b668fcccc35d552b95ed646db03b36a854ddf4c3abaf5eb63eb39f06ec9dce",
+      "updated_sha256": "9eb5aff652a54180b756c24360d9adc97d9f0908d79670911b401a29c238bda9"
+    },
+    {
+      "path": "src/mods/mods.c",
+      "original_sha256": "4762f35bf5d2e3470bfae4902a2dd06380a1ecf6938ff71c2e6b016080fbd828",
+      "updated_sha256": "dfb5a83386bdd4a161da240cafdd9dfd799af6441ceb028c17212bc9998ebeca"
+    },
+    {
+      "path": "src/render/rlist.c",
+      "original_sha256": "f27d355cf3f7ac84db33a397e2cfd56498dcd257f3962b859ce31a7028545d32",
+      "updated_sha256": "8a2f98d7077978bded4443337c379101a53fa45606bea6845e92cb6074dc8915"
+    },
+    {
+      "path": "src/render/swr.c",
+      "original_sha256": "ea3280143ce89360a13b48c6fe88e22f02a1cbd8590b3a3b4033a2b71bd98222",
+      "updated_sha256": "3734b48ea17ca30241cdfbdbd09549e0eadc153f162ff9b722ef78fe9c530621"
+    },
+    {
+      "path": "src/third_party/stb_truetype.h",
+      "original_sha256": "ecd30b05e0dd4fea3a13c26810dd9e1992dc379049482c393d5a19e6b5090aab",
+      "updated_sha256": "0d2b437329b90f3c1e056832024097d72c9035ffee5bedef1ba0774e278f07d5"
+    },
+    {
+      "path": "tests/test_main.c",
+      "original_sha256": "6cb96fac24c6c458c4e9e636abfbc54f4df948ecd5b6b0f19baa1cd20b2c574f",
+      "updated_sha256": "6332cf8a4ac30f3fefe576647c988b539be264cbce13e56fe4de03155577dab8"
+    }
+  ],
+  "codeql": "not executed; original fingerprints unavailable",
+  "media_tests": "skipped; NR_DISC unavailable",
+  "windows": "not built or run",
+  "sanitizers": "ASan/UBSan passed; LeakSanitizer unavailable locally"
+}

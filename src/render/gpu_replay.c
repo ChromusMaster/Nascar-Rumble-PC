@@ -121,9 +121,9 @@ static void set_vtx(nr_gvtx *o, const nr_rvtx *v, const nr_rvtx *flat, bool gour
     float off = (c->flags & RF_SPRITE) ? 0.0f : 0.5f;
     o->x = ((precise ? v->fx : (float)v->x) + off) * (float)sx;
     o->y = ((precise ? v->fy : (float)v->y) + off) * (float)sy;
-    o->r = gouraud ? v->r : flat->r;
-    o->g = gouraud ? v->g : flat->g;
-    o->b = gouraud ? v->b : flat->b;
+    o->r = (float)(gouraud ? v->r : flat->r);
+    o->g = (float)(gouraud ? v->g : flat->g);
+    o->b = (float)(gouraud ? v->b : flat->b);
     o->a = 255;
     o->u = v->u;
     o->v = v->v;
@@ -167,9 +167,9 @@ static void emit_prim(nr_gpu_replay_state *st, const nr_rcmd *c, const nr_gfx_se
             fill_common(&tri[i], c, s, sx > 1 || sy > 1);
             tri[i].x = px[k] * (float)sx;
             tri[i].y = py[k] * (float)sy;
-            tri[i].r = gour ? src[k]->r : a->r;
-            tri[i].g = gour ? src[k]->g : a->g;
-            tri[i].b = gour ? src[k]->b : a->b;
+            tri[i].r = (float)(gour ? src[k]->r : a->r);
+            tri[i].g = (float)(gour ? src[k]->g : a->g);
+            tri[i].b = (float)(gour ? src[k]->b : a->b);
             tri[i].a = 255;
             tri[i].pad0 = 1.0f;
         }

@@ -43,8 +43,8 @@ static int g_pass, g_fail, g_skip;
 /* ---------------------------------------------------------------- helpers */
 
 /* tiny MIPS encoders for test programs */
-#define R_(op, rs, rt, rd, sa, fn) ((u32)(((op) << 26) | ((rs) << 21) | ((rt) << 16) | ((rd) << 11) | ((sa) << 6) | (fn)))
-#define I_(op, rs, rt, imm) ((u32)(((op) << 26) | ((rs) << 21) | ((rt) << 16) | ((u32)(imm) & 0xFFFF)))
+#define R_(op, rs, rt, rd, sa, fn) ((u32)(((u32)(op) << 26) | ((u32)(rs) << 21) | ((u32)(rt) << 16) | ((u32)(rd) << 11) | ((u32)(sa) << 6) | (fn)))
+#define I_(op, rs, rt, imm) ((u32)(((u32)(op) << 26) | ((u32)(rs) << 21) | ((u32)(rt) << 16) | ((u32)(imm) & 0xFFFF)))
 #define ADDIU(rt, rs, imm) I_(9, rs, rt, imm)
 #define ORI(rt, rs, imm) I_(13, rs, rt, imm)
 #define LUI(rt, imm) I_(15, 0, rt, imm)
@@ -521,6 +521,12 @@ static void test_audio_sync(void)
     k = (int)nr_audio_sync_process(&s, in, 735, 2048, out, 1600);
     CHECK(k > 700);
     CHECK(out[200] >= out[198] && out[201] <= out[199]);
+    nr_audio_sync_init(&s, 2048);
+    CHECK_EQ(nr_audio_sync_process(&s, in, 735, 2048, out, 1), 1);
+    CHECK(s.pos >= -1.0 && s.dropped > 0);
+    CHECK(nr_audio_sync_process(&s, in, 735, 2048, out, 1600) > 700);
+    CHECK_EQ(nr_audio_sync_process(&s, in, 735, 2048, NULL, 0), 0);
+    CHECK(s.pos >= -1.0);
 }
 
 /* ------------------------------------------------- enhanced renderer (swr) */
@@ -980,6 +986,21 @@ static void test_data(bool update_golden)
     }
 }
 
+static void test_external_catalog(void)
+{
+    const char *catalog = "[strings]\nS_BTN_PLAY = Start custom\nS_STATUS_BAD = Unsafe %n\nS_BTN_QUIT = Exit custom\nS_BTN_QUIT = Duplicate\nS_BTN_SAVE = \xC0\xAF\nUNKNOWN = Ignore\n";
+    int lang = l10n_find("en-CA");
+    CHECK(nr_write_file("nrtest-catalog.ini", catalog, strlen(catalog)));
+    CHECK(l10n_load_catalog(lang, "nrtest-catalog.ini"));
+    l10n_set(lang);
+    CHECK(strcmp(T(S_BTN_PLAY), "Start custom") == 0);
+    CHECK(strcmp(T(S_BTN_QUIT), "Exit custom") == 0);
+    CHECK(strstr(T(S_STATUS_BAD), "%s") != NULL);
+    CHECK(strcmp(T(S_BTN_SAVE), "Save") == 0);
+    l10n_set(0);
+    remove("nrtest-catalog.ini");
+}
+
 int main(int argc, char **argv)
 {
     bool update = argc > 1 && strcmp(argv[1], "--update-golden") == 0;
@@ -992,6 +1013,7 @@ int main(int argc, char **argv)
     test_bs();
     test_adpcm();
     test_disc();
+    test_external_catalog();
     test_misc();
     test_launcher_font();
     test_hle();

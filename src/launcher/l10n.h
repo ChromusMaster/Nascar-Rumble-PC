@@ -63,6 +63,7 @@ const l10n_lang *l10n_get(int i);
 int l10n_find(const char *code);          /* -1 if unknown */
 /* best match for system locale codes such as "pt_BR", "zh-TW", "es" */
 int l10n_match_locale(const char *lang, const char *country);
+bool l10n_load_catalog(int lang, const char *path);
 void l10n_set(int i);
 int l10n_current(void);
 const char *T(int id);

@@ -49,6 +49,7 @@ nr_rcmd *nr_rlist_push(nr_rlist *l)
 u32 nr_rlist_alloc_data(nr_rlist *l, u32 count)
 {
     u32 at;
+    if (l->ndata > MAX_DATA || count > MAX_DATA - l->ndata) { l->overflow = true; return 0xFFFFFFFFu; }
     if (l->ndata + count > l->data_cap) {
         u32 nc = l->data_cap ? l->data_cap : 1u << 18;
         u16 *p;

@@ -1,0 +1,20 @@
+[cpu]
+[gte]
+[gpu]
+[dma]
+[timers]
+[bs]
+[adpcm]
+[disc]
+[misc]
+[launcher font]
+[hle]
+[audio_sync]
+[swr]
+[discsel/overlay]
+[hid]
+[session]
+[game data]
+  SKIPPED (set NR_DISC to the path of your disc image to run)
+
+Result: 168 ok, 0 failures, 1 group(s) skipped

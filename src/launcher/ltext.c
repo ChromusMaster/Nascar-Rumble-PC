@@ -55,14 +55,31 @@ static lt_script g_script = LT_LATIN;
 
 /* ------------------------------------------------------------ font files */
 
+static u32 font_be32(const u8 *p)
+{
+    return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3];
+}
+
 static bool load_font(lt_font *f, const char *path, int index)
 {
-    u8 *d;
-    long n = nr_read_file(path, &d);
-    int off;
-    if (n <= 0) return false;
-    off = stbtt_GetFontOffsetForIndex(d, index);
-    if (off < 0 || !stbtt_InitFont(&f->info, d, off)) { free(d); return false; }
+    u8 *d = NULL;
+    long n = nr_read_file_limited(path, &d, 64u * 1024u * 1024u);
+    u32 offset = 0, count, i;
+    if (n < 12 || index < 0) { free(d); return false; }
+    if (memcmp(d, "ttcf", 4) == 0) {
+        count = font_be32(d+8);
+        if ((u32)index >= count || count > ((size_t)n-12)/4) { free(d); return false; }
+        offset = font_be32(d+12+(size_t)index*4);
+    } else if (index != 0) { free(d); return false; }
+    if (offset > (size_t)n-12) { free(d); return false; }
+    count = ((u32)d[offset+4] << 8) | d[offset+5];
+    if (count > 4096 || count > ((size_t)n-offset-12)/16) { free(d); return false; }
+    for (i = 0; i < count; i++) {
+        const u8 *table = d + offset + 12 + (size_t)i*16;
+        u32 at = font_be32(table+8), len = font_be32(table+12);
+        if (at > (size_t)n || len > (size_t)n-at) { free(d); return false; }
+    }
+    if (!stbtt_InitFont(&f->info, d, (int)offset)) { free(d); return false; }
     f->data = d;
     f->index = index;
     nr_strlcpy(f->path, path, sizeof(f->path));

@@ -67,10 +67,13 @@ void nr_strlcpy(char *dst, const char *src, size_t n);
 FILE *nr_fopen(const char *path, const char *mode);
 /* On Windows replaces argv with UTF-8 converted arguments (no-op elsewhere). */
 void nr_utf8_args(int *argc, char ***argv);
+bool nr_safe_relative_path(const char *base, const char *relative);
 bool nr_file_exists(const char *path);
 bool nr_is_dir(const char *path);
 /* Reads a whole file. Caller frees *out. Returns size or -1. */
 long nr_read_file(const char *path, u8 **out);
+long nr_read_file_limited(const char *path, u8 **out, size_t limit);
+bool nr_write_file_atomic(const char *path, const void *data, size_t len);
 bool nr_write_file(const char *path, const void *data, size_t len);
 /* Calls fn for every entry (files and directories, without "." and "..") of
  * dir; names are UTF-8. Returns the number of entries or -1. */

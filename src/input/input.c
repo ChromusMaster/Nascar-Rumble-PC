@@ -2,7 +2,7 @@
 #include "hidraw.h"
 #include "../app/app.h"
 
-#include <SDL.h>
+#include "../platform/nr_sdl.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,26 +43,52 @@ int nr_input_list(nr_input_device *out, int max)
     int n = 0, i, j;
     nr_hid_devinfo hid[NR_MAX_INPUT_DEVICES];
     int nh;
-    for (i = 0; i < SDL_NumJoysticks() && n < max; i++) {
+#ifdef NR_SDL3
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    if (!ids) count = 0;
+#else
+    int count = SDL_NumJoysticks();
+#endif
+    for (i = 0; i < count && n < max; i++) {
         nr_input_device *d = &out[n];
-        SDL_JoystickGUID g = SDL_JoystickGetDeviceGUID(i);
+#ifdef NR_SDL3
+        SDL_JoystickID device = ids[i];
+        SDL_GUID g = SDL_GetJoystickGUIDForID(device);
+#else
+        int device = i;
+        SDL_GUID g = SDL_JoystickGetDeviceGUID(device);
+#endif
         char gs[40];
         int same = 0;
         const char *nm;
         memset(d, 0, sizeof(*d));
+#ifdef NR_SDL3
+        SDL_GUIDToString(g, gs, sizeof(gs));
+#else
         SDL_JoystickGetGUIDString(g, gs, sizeof(gs));
+#endif
         for (j = 0; j < n; j++) if (out[j].kind == NR_DEV_SDL && strncmp(out[j].id + 4, gs, strlen(gs)) == 0) same++;
         d->kind = NR_DEV_SDL;
         snprintf(d->id, sizeof(d->id), "sdl:%s@%d", gs, same);
-        d->mapped = SDL_IsGameController(i) == SDL_TRUE;
-        nm = d->mapped ? SDL_GameControllerNameForIndex(i) : SDL_JoystickNameForIndex(i);
+        d->mapped = SDL_IsGamepad(device) == true;
+#ifdef NR_SDL3
+        nm = d->mapped ? SDL_GetGamepadNameForID(device) : SDL_GetJoystickNameForID(device);
+        d->vid = SDL_GetJoystickVendorForID(device);
+        d->pid = SDL_GetJoystickProductForID(device);
+#else
+        nm = d->mapped ? SDL_GameControllerNameForIndex(device) : SDL_JoystickNameForIndex(device);
+        d->vid = SDL_JoystickGetDeviceVendor(device);
+        d->pid = SDL_JoystickGetDeviceProduct(device);
+#endif
         nr_strlcpy(d->name, nm ? nm : "Controller", sizeof(d->name));
-        d->vid = SDL_JoystickGetDeviceVendor(i);
-        d->pid = SDL_JoystickGetDeviceProduct(i);
-        d->sdl_index = i;
+        d->sdl_index = device;
         d->accessible = true;
         n++;
     }
+#ifdef NR_SDL3
+    SDL_free(ids);
+#endif
     nh = nr_hidraw_enumerate(hid, NR_MAX_INPUT_DEVICES);
     for (i = 0; i < nh && n < max; i++) {
         nr_input_device *d = &out[n];
@@ -76,7 +102,7 @@ int nr_input_list(nr_input_device *out, int max)
         d->vid = hid[i].vid;
         d->pid = hid[i].pid;
         d->accessible = hid[i].accessible;
-        d->sdl_index = -1;
+        d->sdl_index = UINT32_MAX;
         n++;
     }
     return n;
@@ -85,7 +111,7 @@ int nr_input_list(nr_input_device *out, int max)
 struct nr_pad {
     nr_dev_kind kind;
     char name[128];
-    SDL_GameController *gc;
+    SDL_Gamepad *gc;
     SDL_Joystick *js;
     SDL_JoystickID jid;
     nr_hidraw *hid;
@@ -117,12 +143,12 @@ nr_pad *nr_pad_open(const char *id, int auto_index)
     nr_strlcpy(p->name, dev[pick].name, sizeof(p->name));
     if (p->kind == NR_DEV_SDL) {
         if (dev[pick].mapped) {
-            p->gc = SDL_GameControllerOpen(dev[pick].sdl_index);
-            p->js = p->gc ? SDL_GameControllerGetJoystick(p->gc) : NULL;
+            p->gc = SDL_OpenGamepad(dev[pick].sdl_index);
+            p->js = p->gc ? SDL_GetGamepadJoystick(p->gc) : NULL;
         }
-        if (!p->js) p->js = SDL_JoystickOpen(dev[pick].sdl_index);
+        if (!p->js) p->js = SDL_OpenJoystick(dev[pick].sdl_index);
         if (!p->js) { free(p); return NULL; }
-        p->jid = SDL_JoystickInstanceID(p->js);
+        p->jid = SDL_GetJoystickID(p->js);
     } else {
         char err[256];
         p->hid = nr_hidraw_open(dev[pick].path, err, sizeof(err));
@@ -136,8 +162,8 @@ nr_pad *nr_pad_open(const char *id, int auto_index)
 void nr_pad_close(nr_pad *p)
 {
     if (!p) return;
-    if (p->gc) SDL_GameControllerClose(p->gc);
-    else if (p->js) SDL_JoystickClose(p->js);
+    if (p->gc) SDL_CloseGamepad(p->gc);
+    else if (p->js) SDL_CloseJoystick(p->js);
     if (p->hid) nr_hidraw_close(p->hid);
     free(p);
 }
@@ -149,7 +175,7 @@ void nr_pad_update(nr_pad *p)
 {
     if (!p) return;
     if (p->hid && p->alive) p->alive = nr_hidraw_poll(p->hid, &p->st);
-    if (p->js && !SDL_JoystickGetAttached(p->js)) p->alive = false;
+    if (p->js && !SDL_JoystickConnected(p->js)) p->alive = false;
 }
 
 /* ------------------------------------------------------------ raw access */
@@ -157,27 +183,27 @@ void nr_pad_update(nr_pad *p)
 static int raw_buttons(const nr_pad *p)
 {
     if (p->hid) return nr_hidraw_layout(p->hid)->nbuttons;
-    return p->js ? SDL_JoystickNumButtons(p->js) : 0;
+    return p->js ? SDL_GetNumJoystickButtons(p->js) : 0;
 }
 static int raw_axes(const nr_pad *p)
 {
     if (p->hid) return nr_hidraw_layout(p->hid)->naxes;
-    return p->js ? SDL_JoystickNumAxes(p->js) : 0;
+    return p->js ? SDL_GetNumJoystickAxes(p->js) : 0;
 }
 static int raw_hats(const nr_pad *p)
 {
     if (p->hid) return nr_hidraw_layout(p->hid)->nhats;
-    return p->js ? SDL_JoystickNumHats(p->js) : 0;
+    return p->js ? SDL_GetNumJoystickHats(p->js) : 0;
 }
 static bool raw_button(const nr_pad *p, int i)
 {
     if (p->hid) return i < 32 && (p->st.buttons >> i) & 1;
-    return p->js && SDL_JoystickGetButton(p->js, i);
+    return p->js && SDL_GetJoystickButton(p->js, i);
 }
 static s16 raw_axis(const nr_pad *p, int i)
 {
     if (p->hid) return i < NR_HID_MAX_AXES ? p->st.axis[i] : 0;
-    return p->js ? SDL_JoystickGetAxis(p->js, i) : 0;
+    return p->js ? SDL_GetJoystickAxis(p->js, i) : 0;
 }
 /* hat as SDL bit mask (SDL_HAT_UP=1, RIGHT=2, DOWN=4, LEFT=8) */
 static u8 raw_hat(const nr_pad *p, int i)
@@ -187,7 +213,7 @@ static u8 raw_hat(const nr_pad *p, int i)
         int v = i < NR_HID_MAX_HATS ? p->st.hat[i] : -1;
         return (u8)(v >= 0 && v < 8 ? dirs[v] : 0);
     }
-    return p->js ? SDL_JoystickGetHat(p->js, i) : 0;
+    return p->js ? SDL_GetJoystickHat(p->js, i) : 0;
 }
 
 static u8 hat_bit(const char *dir)
@@ -218,15 +244,15 @@ bool nr_pad_binding_active(const nr_pad *p, const char *b)
         char name[32];
         size_t l = strlen(b);
         char sign = 0;
-        SDL_GameControllerButton btn;
-        SDL_GameControllerAxis ax;
+        SDL_GamepadButton btn;
+        SDL_GamepadAxis ax;
         nr_strlcpy(name, b, sizeof(name));
         if (l > 1 && (b[l - 1] == '+' || b[l - 1] == '-')) { sign = b[l - 1]; name[l - 1] = 0; }
-        btn = SDL_GameControllerGetButtonFromString(name);
-        if (btn != SDL_CONTROLLER_BUTTON_INVALID) return SDL_GameControllerGetButton(p->gc, btn) != 0;
-        ax = SDL_GameControllerGetAxisFromString(name);
-        if (ax != SDL_CONTROLLER_AXIS_INVALID) {
-            s16 v = SDL_GameControllerGetAxis(p->gc, ax);
+        btn = nr_sdl_button_from_string(name);
+        if (btn != SDL_GAMEPAD_BUTTON_INVALID) return SDL_GetGamepadButton(p->gc, btn) != 0;
+        ax = SDL_GetGamepadAxisFromString(name);
+        if (ax != SDL_GAMEPAD_AXIS_INVALID) {
+            s16 v = SDL_GetGamepadAxis(p->gc, ax);
             return sign == '-' ? v < -AXIS_ON : v > AXIS_ON;
         }
     }
@@ -250,8 +276,8 @@ void nr_pad_capture_begin(nr_pad *p)
     if (!p) return;
     p->cap_active = true;
     if (p->gc) {
-        for (i = 0; i < SDL_CONTROLLER_BUTTON_MAX && i < 64; i++) p->base_btn[i] = SDL_GameControllerGetButton(p->gc, (SDL_GameControllerButton)i);
-        for (i = 0; i < SDL_CONTROLLER_AXIS_MAX && i < 16; i++) p->base_axis[i] = SDL_GameControllerGetAxis(p->gc, (SDL_GameControllerAxis)i);
+        for (i = 0; i < SDL_GAMEPAD_BUTTON_COUNT && i < 64; i++) p->base_btn[i] = SDL_GetGamepadButton(p->gc, (SDL_GamepadButton)i);
+        for (i = 0; i < SDL_GAMEPAD_AXIS_COUNT && i < 16; i++) p->base_axis[i] = SDL_GetGamepadAxis(p->gc, (SDL_GamepadAxis)i);
         return;
     }
     for (i = 0; i < raw_buttons(p) && i < 64; i++) p->base_btn[i] = raw_button(p, i);
@@ -272,20 +298,20 @@ bool nr_pad_capture(nr_pad *p, char *out, size_t n)
     char sign;
     if (!p || !p->cap_active || !p->alive) return false;
     if (p->gc) {
-        for (i = 0; i < SDL_CONTROLLER_BUTTON_MAX && i < 64; i++) {
-            u8 v = SDL_GameControllerGetButton(p->gc, (SDL_GameControllerButton)i);
+        for (i = 0; i < SDL_GAMEPAD_BUTTON_COUNT && i < 64; i++) {
+            u8 v = SDL_GetGamepadButton(p->gc, (SDL_GamepadButton)i);
             if (v && !p->base_btn[i]) {
-                snprintf(out, n, "%s", SDL_GameControllerGetStringForButton((SDL_GameControllerButton)i));
+                snprintf(out, n, "%s", nr_sdl_button_name((SDL_GamepadButton)i));
                 p->cap_active = false;
                 return true;
             }
             p->base_btn[i] = v;
         }
-        for (i = 0; i < SDL_CONTROLLER_AXIS_MAX && i < 16; i++) {
-            s16 v = SDL_GameControllerGetAxis(p->gc, (SDL_GameControllerAxis)i);
+        for (i = 0; i < SDL_GAMEPAD_AXIS_COUNT && i < 16; i++) {
+            s16 v = SDL_GetGamepadAxis(p->gc, (SDL_GamepadAxis)i);
             if (axis_newly(p->base_axis[i], v, &sign)) {
-                bool trigger = i == SDL_CONTROLLER_AXIS_TRIGGERLEFT || i == SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
-                snprintf(out, n, "%s%s", SDL_GameControllerGetStringForAxis((SDL_GameControllerAxis)i), trigger ? "" : (sign == '+' ? "+" : "-"));
+                bool trigger = i == SDL_GAMEPAD_AXIS_LEFT_TRIGGER || i == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER;
+                snprintf(out, n, "%s%s", SDL_GetGamepadStringForAxis((SDL_GamepadAxis)i), trigger ? "" : (sign == '+' ? "+" : "-"));
                 p->cap_active = false;
                 return true;
             }
@@ -372,7 +398,7 @@ u16 nr_port_read(const nr_port_config *pc, nr_pad *pad, const u8 *ks)
     u16 m = 0;
     int i;
     for (i = 0; i < NR_PS_BUTTONS; i++) {
-        if (ks && pc->keys[i] > 0 && pc->keys[i] < SDL_NUM_SCANCODES && ks[pc->keys[i]]) m |= nr_ps_button_bit[i];
+        if (ks && pc->keys[i] > 0 && pc->keys[i] < SDL_SCANCODE_COUNT && ks[pc->keys[i]]) m |= nr_ps_button_bit[i];
         if (pad) {
             const char *b = pc->bind[i][0] ? pc->bind[i] : nr_pad_default_binding(pad, i);
             if (nr_pad_binding_active(pad, b)) m |= nr_ps_button_bit[i];

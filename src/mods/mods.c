@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <errno.h>
 
 #define K_MODSTR_BASE 0x6000u
 #define K_MODSTR_END 0xC000u
@@ -58,34 +60,51 @@ static const char *k_translit[64] = {
 /* UTF-8 -> game bytes. Escapes: \xNN (raw byte), \n, \\. */
 static char *encode(const char *s, bool keep_accents)
 {
-    size_t cap = strlen(s) * 2 + 1, o = 0;
-    char *out = (char *)malloc(cap);
-    const unsigned char *p = (const unsigned char *)s;
+    size_t len = strlen(s), o = 0;
+    char *out;
+    const unsigned char *p = (const unsigned char *)s, *end = p + len;
+    if (len > 1024u * 1024u) return NULL;
+    out = (char *)malloc(len * 2 + 1);
     if (!out) return NULL;
-    while (*p) {
+    while (p < end) {
         unsigned cp;
-        if (*p == '\\' && p[1] == 'x' && p[2] && p[3]) {
-            char h[3] = { (char)p[2], (char)p[3], 0 };
-            out[o++] = (char)strtoul(h, NULL, 16);
-            p += 4;
-            continue;
+        if (*p == '\\') {
+            if (end-p < 2) goto invalid;
+            if (p[1] == 'n') { out[o++] = '\n'; p += 2; continue; }
+            if (p[1] == '\\') { out[o++] = '\\'; p += 2; continue; }
+            if (p[1] == 'x' && end-p >= 4) {
+                int a, b;
+                a = p[2] >= '0' && p[2] <= '9' ? p[2]-'0' : p[2] >= 'A' && p[2] <= 'F' ? p[2]-'A'+10 : p[2] >= 'a' && p[2] <= 'f' ? p[2]-'a'+10 : -1;
+                b = p[3] >= '0' && p[3] <= '9' ? p[3]-'0' : p[3] >= 'A' && p[3] <= 'F' ? p[3]-'A'+10 : p[3] >= 'a' && p[3] <= 'f' ? p[3]-'a'+10 : -1;
+                if (a < 0 || b < 0 || !(a || b)) goto invalid;
+                out[o++] = (char)(a * 16 + b); p += 4; continue;
+            }
+            goto invalid;
         }
-        if (*p == '\\' && p[1] == 'n') { out[o++] = '\n'; p += 2; continue; }
-        if (*p == '\\' && p[1] == '\\') { out[o++] = '\\'; p += 2; continue; }
         if (*p < 0x80) { out[o++] = (char)*p++; continue; }
-        if ((p[0] & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80) { cp = ((p[0] & 0x1Fu) << 6) | (p[1] & 0x3Fu); p += 2; }
-        else { p++; while ((*p & 0xC0) == 0x80) p++; cp = '?'; }
+        {
+            int count, i;
+            unsigned min;
+            if (*p >= 0xC2 && *p <= 0xDF) { count = 2; min = 0x80; cp = *p & 31; }
+            else if (*p >= 0xE0 && *p <= 0xEF) { count = 3; min = 0x800; cp = *p & 15; }
+            else if (*p >= 0xF0 && *p <= 0xF4) { count = 4; min = 0x10000; cp = *p & 7; }
+            else goto invalid;
+            if (end-p < count) goto invalid;
+            for (i = 1; i < count; i++) { if ((p[i] & 0xC0) != 0x80) goto invalid; cp = (cp << 6) | (p[i] & 63); }
+            if (cp < min || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) goto invalid;
+            p += count;
+        }
         if (cp >= 0xC0 && cp <= 0xFF && !keep_accents) {
             const char *t = k_translit[cp - 0xC0];
-            while (*t && o + 1 < cap) out[o++] = *t++;
-        } else if (cp < 256) {
-            out[o++] = keep_accents ? (char)cp : (cp >= 0xA0 ? '?' : (char)cp);
-        } else {
-            out[o++] = '?';
-        }
+            while (*t) out[o++] = *t++;
+        } else if (cp < 256) out[o++] = keep_accents ? (char)cp : '?';
+        else { NR_WARN("mods", "unsupported game character U+%04X; entry rejected", cp); goto invalid; }
     }
     out[o] = 0;
     return out;
+invalid:
+    free(out);
+    return NULL;
 }
 
 static char *trim(char *s)
@@ -105,22 +124,23 @@ static char *unquote(char *s)
     return s;
 }
 
-static int cmp_fe(const void *a, const void *b) { return ((const fe_entry *)a)->id - ((const fe_entry *)b)->id; }
+static int cmp_fe(const void *a, const void *b) { int x = ((const fe_entry *)a)->id, y = ((const fe_entry *)b)->id; return (x > y) - (x < y); }
 
 static void load_text(nr_mods *m, const char *path)
 {
     u8 *txt;
-    long n = nr_read_file(path, &txt);
+    long n = nr_read_file_limited(path, &txt, 1024u * 1024u);
     char *line, *next, section[16] = "";
     int lineno = 0;
     if (n < 0) return;
+    if (memchr(txt, 0, (size_t)n)) { NR_WARN("mods", "catalog contains NUL; rejected"); free(txt); return; }
     for (line = (char *)txt; line && *line; line = next) {
         char *t, *eq;
         next = strchr(line, '\n');
         if (next) *next++ = 0;
         lineno++;
         t = trim(line);
-        if (lineno == 1 && (unsigned char)t[0] == 0xEF) t += 3; /* BOM */
+        if (lineno == 1 && strlen(t) >= 3 && memcmp(t, "\xEF\xBB\xBF", 3) == 0) t += 3; /* BOM */
         if (!*t || *t == '#' || *t == ';') continue;
         if (*t == '[') {
             char *e = strchr(t, ']');
@@ -141,14 +161,28 @@ static void load_text(nr_mods *m, const char *path)
             eq = strchr(t, '=');
             if (!eq) { NR_WARN("mods", "%s:%d: line without '='", path, lineno); continue; }
             *eq = 0;
-            id = atoi(trim(t));
+            {
+                char *end;
+                long parsed;
+                errno = 0;
+                parsed = strtol(trim(t), &end, 10);
+                if (errno || *end || end == trim(t) || parsed < 0 || parsed > INT_MAX) { NR_WARN("mods", "invalid text ID at line %d", lineno); continue; }
+                id = (int)parsed;
+            }
             {
                 char *val = unquote(trim(eq + 1));
-                void *pp = realloc(m->fe, sizeof(fe_entry) * (size_t)(m->nfe + 1));
-                if (!pp) break;
+                char *encoded = encode(val, m->keep_accents);
+                void *pp;
+                int j;
+                if (!encoded) { NR_WARN("mods", "invalid text at line %d", lineno); continue; }
+                for (j = 0; j < m->nfe; j++) if (m->fe[j].id == id) break;
+                if (j < m->nfe) { free(encoded); NR_WARN("mods", "duplicate text ID %d ignored", id); continue; }
+                if (m->nfe >= 4096) { free(encoded); NR_WARN("mods", "text entry limit reached"); break; }
+                pp = realloc(m->fe, sizeof(fe_entry) * (size_t)(m->nfe + 1));
+                if (!pp) { free(encoded); break; }
                 m->fe = (fe_entry *)pp;
                 m->fe[m->nfe].id = id;
-                m->fe[m->nfe].text = encode(val, m->keep_accents);
+                m->fe[m->nfe].text = encoded;
                 m->fe[m->nfe].addr = 0;
                 m->nfe++;
             }
@@ -164,12 +198,16 @@ static void load_text(nr_mods *m, const char *path)
             {
                 size_t bl = strlen(b);
                 void *pp;
+                char *orig, *repl;
                 if (bl && b[bl - 1] == '"') b[bl - 1] = 0;
+                orig = encode(a + 1, true);
+                repl = encode(b, m->keep_accents);
+                if (!orig || !repl || !*orig || m->nex >= 4096) { free(orig); free(repl); NR_WARN("mods", "invalid message at line %d", lineno); continue; }
                 pp = realloc(m->ex, sizeof(exe_entry) * (size_t)(m->nex + 1));
-                if (!pp) break;
+                if (!pp) { free(orig); free(repl); break; }
                 m->ex = (exe_entry *)pp;
-                m->ex[m->nex].orig = encode(a + 1, true);
-                m->ex[m->nex].repl = encode(b, m->keep_accents);
+                m->ex[m->nex].orig = orig;
+                m->ex[m->nex].repl = repl;
                 m->nex++;
             }
         }
@@ -195,6 +233,7 @@ static void file_cb(void *user, const char *name, bool is_dir)
     char rel[512];
     if (dc->rel[0]) snprintf(rel, sizeof(rel), "%s/%s", dc->rel, name);
     else nr_strlcpy(rel, name, sizeof(rel));
+    if (strlen(dc->rel) + strlen(name) + 2 >= sizeof(rel) || strlen(rel) > 384 || !nr_safe_relative_path(dc->w->base, rel)) { NR_WARN("mods", "unsafe overlay path rejected"); return; }
     if (is_dir) { walk_files(dc->w, rel); return; }
     {
         char full[1600], err[256];
@@ -205,7 +244,7 @@ static void file_cb(void *user, const char *name, bool is_dir)
             NR_WARN("mods", "%s ignored: the executable and SYSTEM.CNF cannot be replaced", rel);
             return;
         }
-        n = nr_read_file(full, &data);
+        n = nr_read_file_limited(full, &data, 64u * 1024u * 1024u);
         if (n < 0) { NR_WARN("mods", "could not read %s", full); return; }
         if (nr_disc_overlay_file(dc->w->disc, rel, data, (u32)n, err, sizeof(err))) {
             dc->w->m->files++;
@@ -241,6 +280,7 @@ static bool find_mod_dir(const char *rel, char *out, size_t n)
     bases[3] = nr_share_dir();
     for (i = 0; i < 4; i++) {
         nr_path_join(m, sizeof(m), bases[i], "mods");
+        if (!nr_safe_relative_path(bases[i], "mods") || !nr_safe_relative_path(m, rel)) continue;
         nr_path_join(cand, sizeof(cand), m, rel);
         if (nr_is_dir(cand)) { nr_strlcpy(out, cand, n); return true; }
     }
@@ -256,11 +296,11 @@ static void load_mod(nr_mods *m, const char *rel, nr_disc *disc)
     if (m->names[0]) strncat(m->names, ", ", sizeof(m->names) - strlen(m->names) - 1);
     strncat(m->names, rel, sizeof(m->names) - strlen(m->names) - 1);
     nr_path_join(p, sizeof(p), dir, "text.txt");
-    load_text(m, p);
+    if (nr_safe_relative_path(dir, "text.txt")) load_text(m, p);
     nr_path_join(w.base, sizeof(w.base), dir, "files");
     w.m = m;
     w.disc = disc;
-    if (nr_is_dir(w.base)) walk_files(&w, "");
+    if (nr_safe_relative_path(dir, "files") && nr_is_dir(w.base)) walk_files(&w, "");
 }
 
 nr_mods *nr_mods_open(const char *language, const char *extra, nr_disc *disc)
@@ -271,6 +311,7 @@ nr_mods *nr_mods_open(const char *language, const char *extra, nr_disc *disc)
     if (!m) return NULL;
     if (language && *language) {
         char rel[256];
+        if (strlen(language) >= sizeof(rel) - 10) { free(m); return NULL; }
         snprintf(rel, sizeof(rel), "Language/%s", language);
         load_mod(m, rel, disc);
     }
@@ -326,10 +367,10 @@ static void patch_exe_strings(nr_mods *m, psx *p)
             if (ram[k - 1] != 0 || memcmp(ram + k, o, ol) != 0 || ram[k + ol] != 0) continue;
             /* space up to the next string (the terminating zero must stay) */
             cap = (u32)ol;
-            while (k + cap + 1 < len && ram[k + cap + 1] == 0) cap++;
-            if (rl > cap) NR_WARN("mods", "text \"%s\" cut to %u characters (fits the space of the original)", r, cap);
+
+            if (rl > cap) { NR_WARN("mods", "translation exceeds original message capacity (%u bytes); skipped", cap); found = true; continue; }
             memset(ram + k, 0, cap + 1);
-            memcpy(ram + k, r, rl > cap ? cap : rl);
+            memcpy(ram + k, r, rl);
             found = true;
             done++;
             k += cap;

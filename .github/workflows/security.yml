@@ -1,0 +1,50 @@
+name: Security and regression
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build-ci -DNR_BUILD_SDL2=OFF -DNR_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build build-ci --config Debug --parallel 2
+      - run: ctest --test-dir build-ci -C Debug --output-on-failure
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build-san -DNR_BUILD_SDL2=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+      - run: cmake --build build-san --parallel 2
+      - run: ctest --test-dir build-san --output-on-failure
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libsdl2-dev
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-and-quality
+      - run: cmake -S . -B build-codeql -DNR_BUILD_SDL2=ON -DNR_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+      - run: cmake --build build-codeql --parallel 2
+      - uses: github/codeql-action/analyze@v3
+        with:
+          output: sarif
+      - run: python3 scripts/check_security_sarif.py sarif
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: codeql-sarif
+          path: sarif

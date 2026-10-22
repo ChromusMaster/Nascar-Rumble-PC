@@ -24,7 +24,7 @@ targets = {
     "nr_render_security": ["tests/test_render_security.c"],
     "nr_mod_security": ["tests/test_mod_security.c"],
 }
-flags = ["-std=gnu99", "-O1", "-g", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Wno-misleading-indentation", "-Isrc", '-DNR_VERSION_STRING="0.3.2"', f'-DNR_GOLDEN_FILE="{root / "tests/golden_slus01068.txt"}"']
+flags = ["-std=gnu99", "-O1", "-g", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Wno-misleading-indentation", "-Isrc", '-DNR_VERSION_STRING="0.0.4-alpha01"', f'-DNR_GOLDEN_FILE="{root / "tests/golden_slus01068.txt"}"']
 if args.sanitize:
     flags += ["-fsanitize=address,undefined", "-fno-sanitize-recover=all", "-fno-omit-frame-pointer", "-fno-pie", "-no-pie"]
 objects = {}

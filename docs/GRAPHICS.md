@@ -52,7 +52,7 @@ the shaders (`src/render/gfx.c`, `src/platform/gl_shaders.h`,
 
 The console produces a standard-range picture; it has no highlights above
 white for a tone curve to compress. The tone curves are therefore used as
-look curves, with these rules (0.3.3):
+look curves, with these rules (0.0.4-alpha01):
 
 - the picture is converted from sRGB to linear light, the curve is applied to
   the luminance (BT.709 weights) and the colour is scaled by the luminance
@@ -71,7 +71,7 @@ luminance of every pixel, plus a vibrance boost (up to 15 % × strength) that
 is smaller for colours that are already saturated, and are fitted back into
 the displayable range by moving towards grey instead of clipping a channel.
 
-Before 0.3.3 the curves were applied per channel to the gamma-encoded picture:
+Before 0.0.4-alpha01 the curves were applied per channel to the gamma-encoded picture:
 white came out at 75 % (ACES), dark tones were crushed, saturated colours
 shifted hue and clipped, and `cinematic` raised saturation by 12 % with hard
 clipping.
@@ -182,7 +182,7 @@ Known limitations of the enhanced renderers:
 - PGXP: entries of the precision cache are valid for two display flips; a
   screen position computed twice in the same frame with depths that differ by
   more than 2 % (or 1 unit) is marked ambiguous and not used, because the
-  cache cannot tell which polygon the game meant. Before 0.3.3 stale entries
+  cache cannot tell which polygon the game meant. Before 0.0.4-alpha01 stale entries
   from earlier frames and the last of several conflicting depths were used,
   which gave wrong perspective to some polygons (textures flickering or
   sliding over each other). The log shows hits, misses, conflicts and expired

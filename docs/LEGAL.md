@@ -6,7 +6,10 @@ Only source code, build scripts, packaging files, tests and documentation
 written for this project, under the MIT licence (`LICENSE`), plus the
 third-party files listed in `THIRD_PARTY_NOTICES.md` (`stb_truetype.h`,
 public domain/MIT). The icon in `packaging/linux/nrengine.svg` is original
-artwork made for this project (CC0).
+artwork made for this project (CC0), as are the launcher and headless icons
+in `packaging/icons/`. The pictures in `docs/images/` are captures of the
+project's own launcher: its interface and its built-in test picture. They
+contain no game content; captures of the running game are never committed.
 
 ## What this project never contains
 
@@ -56,7 +59,9 @@ codes, MDEC tables) follow public technical documentation of the PlayStation
 
 `scripts/check_package.py` walks a folder (or a ZIP) and fails if it finds
 disc image extensions, PS-X executables, file names from the game disc, binary
-files or captures. It is run on every source archive before delivery. The
+files or captures. The project's own images listed above are accepted only
+when their SHA-256 matches the value recorded in the script, so any change to
+them has to be reviewed. It is run on every source archive before delivery. The
 binary packages are checked by listing their contents (only the engine's own
 programs, `SDL2.dll` on Windows, documentation and the example language pack
 with translations written for the project).

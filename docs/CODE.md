@@ -2,7 +2,7 @@
 
 This document describes public functions, types and constants. The source
 files carry no comments; rationale and hardware notes live here and in the
-documents referenced from each entry. Entries were added starting with 0.3.3;
+documents referenced from each entry. Entries were added starting with 0.0.4-alpha01;
 APIs older than that are described in ARCHITECTURE.md, GRAPHICS.md and
 NATIVE.md until they are moved here.
 

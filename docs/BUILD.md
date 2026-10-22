@@ -74,7 +74,7 @@ sudo pacman -S --needed base-devel cmake sdl2
 ### 3.2 Build with the helper script
 
 ```sh
-cd nrengine-0.3.2
+cd Nascar-Rumble-PC
 scripts/build.sh                 # Release build in ./build
 scripts/build.sh Debug           # debug build
 BUILD_DIR=out scripts/build.sh   # other build folder

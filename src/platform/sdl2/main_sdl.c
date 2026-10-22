@@ -14,6 +14,7 @@
 #include "../../input/input.h"
 #include "../../ui/ui.h"
 #include "../video.h"
+#include "../sysinfo.h"
 
 #include "../nr_sdl.h"
 #ifdef NR_SDL3
@@ -62,7 +63,7 @@ static SDL_Window *make_window(const nr_options *o, bool gl)
 /* Tries the chosen renderer, then the fallbacks. The window is recreated
  * when a backend needs an OpenGL window and the current one is not (or the
  * other way round). */
-static bool open_backend(SDL_Window **win, const nr_options *o, nr_vbackend *b)
+static bool open_backend(SDL_Window **win, const nr_options *o, nr_vbackend *b, const nr_sysinfo *si)
 {
     const char *order[8];
     int n = 0, i;
@@ -92,6 +93,7 @@ static bool open_backend(SDL_Window **win, const nr_options *o, nr_vbackend *b)
             if (!*win) { NR_WARN("video", "cannot create the window: %s", SDL_GetError()); continue; }
         }
         err[0] = 0;
+        nr_gfx_set_memory_scale_limit(nr_sysinfo_scale_limit(si, strcmp(lname, "software") == 0));
         if (b->init(b, window_handle(*win, b), &o->gfx, err, sizeof(err))) {
             NR_INFO("video", "renderer: %s%s%s", b->name, b->description[0] ? " - " : "", b->description);
             if (nr_strcasecmp(lname, o->renderer) != 0 && nr_strcasecmp(o->renderer, "auto") != 0)
@@ -200,6 +202,7 @@ int main(int argc, char **argv)
     SDL_Window *win = NULL;
     nr_sdl_audio audio = 0;
     nr_vbackend vb;
+    nr_sysinfo si;
     bool vb_ok = false, running = true, hires_synced = false, paused = false;
     ports pt;
     nr_config *cfg;
@@ -257,7 +260,13 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    vb_ok = open_backend(&win, &a.opt, &vb);
+    {
+        char hw[256];
+        nr_sysinfo_query(&si);
+        nr_sysinfo_describe(&si, hw, sizeof(hw));
+        NR_INFO("system", "%s", hw);
+    }
+    vb_ok = open_backend(&win, &a.opt, &vb, &si);
     if (!vb_ok) {
         show_error("No renderer could be started (see nrengine.log).");
         if (win) SDL_DestroyWindow(win);
@@ -276,7 +285,11 @@ int main(int argc, char **argv)
     {
         if (SDL_WasInit(SDL_INIT_AUDIO)) audio = nr_sdl_audio_open();
         if (!audio) NR_WARN("sdl", "no audio output: %s", SDL_GetError());
-        else nr_sdl_audio_pause(audio, 0);
+        else {
+            const char *drv = SDL_GetCurrentAudioDriver();
+            NR_INFO("audio", "output: %s (driver %s, 44100 Hz stereo)", nr_sdl_audio_device_name(audio), drv ? drv : "unknown");
+            nr_sdl_audio_pause(audio, 0);
+        }
     }
     nr_audio_sync_init(&as, 2205);    /* ~50 ms of queued audio */
     abuf = (s16 *)SDL_malloc(44100 * 4);

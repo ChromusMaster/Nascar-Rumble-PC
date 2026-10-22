@@ -666,6 +666,9 @@ void nr_app_shutdown(nr_app *a)
     nr_swr_free(a->swr);
     nr_rlist_free(a->rec);
     nr_mods_close(a->mods);
+    if (a->pgxp) NR_INFO("render", "PGXP: %llu hits, %llu misses, %llu depth conflicts, %llu expired",
+                         (unsigned long long)a->pgxp->hits, (unsigned long long)a->pgxp->misses,
+                         (unsigned long long)a->pgxp->conflicts, (unsigned long long)a->pgxp->expired);
     free(a->pgxp);
     free(a->post);
     free(a->script);

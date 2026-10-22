@@ -12,6 +12,8 @@
 #include "../src/app/app.h"
 #include "../src/app/audio_sync.h"
 #include "../src/render/swr.h"
+#include "../src/render/pgxp.h"
+#include "../src/render/gfx.h"
 #include "../src/disc/discsel.h"
 #include "../src/mods/mods.h"
 #include "../src/input/hidparse.h"
@@ -19,6 +21,7 @@
 #include "../src/launcher/ltext.h"
 #include "../src/launcher/l10n.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1001,6 +1004,112 @@ static void test_external_catalog(void)
     remove("nrtest-catalog.ini");
 }
 
+static void test_gfx_budget(void)
+{
+    nr_gfx_settings g, tmp;
+    const nr_gfx_settings *r;
+    const u64 mib = 1024u * 1024u;
+    fprintf(stderr, "[gfx budget]\n");
+    CHECK_EQ(nr_gfx_memory_scale_limit(0, 3), 16);
+    CHECK_EQ(nr_gfx_memory_scale_limit(4096u * mib, 3), 16);
+    CHECK_EQ(nr_gfx_memory_scale_limit(512u * mib, 3), 9);
+    CHECK_EQ(nr_gfx_memory_scale_limit(64u * mib, 3), 3);
+    CHECK_EQ(nr_gfx_memory_scale_limit(1u * mib, 3), 1);
+    CHECK_EQ(nr_gfx_render_budget(8192u * mib, 1024u * mib, true), 512u * mib);
+    CHECK_EQ(nr_gfx_render_budget(8192u * mib, 0, false), 2048u * mib);
+    nr_gfx_defaults(&g);
+    g.internal_scale = 8; g.antialias = 16;
+    nr_gfx_set_memory_scale_limit(9);
+    r = nr_gfx_fit(&g, 16, &tmp);
+    CHECK(r == &tmp);
+    CHECK_EQ(tmp.internal_scale, 8);
+    CHECK_EQ(tmp.antialias, 1);
+    nr_gfx_set_memory_scale_limit(4);
+    r = nr_gfx_fit(&g, 16, &tmp);
+    CHECK_EQ(r->internal_scale, 4);
+    CHECK_EQ(r->antialias, 1);
+    nr_gfx_set_memory_scale_limit(16);
+    g.internal_scale = 2; g.antialias = 4;
+    CHECK(nr_gfx_fit(&g, 16, &tmp) == &g);
+}
+
+static void test_pgxp(void)
+{
+    nr_pgxp *c = (nr_pgxp *)calloc(1, sizeof(nr_pgxp));
+    float x, y, w;
+    fprintf(stderr, "[pgxp]\n");
+    CHECK(c != NULL);
+    if (!c) return;
+    nr_pgxp_store(c, 0x00100020u, 32.25f, 16.5f, 1000.0f);
+    CHECK(nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    CHECK(x == 32.25f && y == 16.5f && w == 1000.0f);
+    CHECK(!nr_pgxp_lookup(c, 0x00100021u, &x, &y, &w));
+    nr_pgxp_store(c, 0x00100020u, 32.3f, 16.4f, 1010.0f);
+    CHECK(nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    nr_pgxp_store(c, 0x00100020u, 32.1f, 16.2f, 3000.0f);
+    CHECK(!nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    CHECK_EQ(c->conflicts, 1);
+    nr_pgxp_tick(c);
+    nr_pgxp_store(c, 0x00100020u, 32.0f, 16.0f, 500.0f);
+    CHECK(nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    CHECK(w == 500.0f);
+    nr_pgxp_tick(c); nr_pgxp_tick(c);
+    CHECK(nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    nr_pgxp_tick(c);
+    CHECK(!nr_pgxp_lookup(c, 0x00100020u, &x, &y, &w));
+    CHECK_EQ(c->expired, 1);
+    free(c);
+}
+
+static float color_hue_ratio(const float c[3]) { float r = nr_gfx_srgb_to_linear(c[0]); return r > 0.0f ? nr_gfx_srgb_to_linear(c[1]) / r : 0.0f; }
+
+static void test_color(void)
+{
+    nr_gfx_tonemap t;
+    float c[3];
+    int i;
+    fprintf(stderr, "[color]\n");
+    for (i = 0; i <= 255; i++) {
+        float v = (float)i / 255.0f;
+        CHECK(fabsf(nr_gfx_linear_to_srgb(nr_gfx_srgb_to_linear(v)) - v) < 0.0005f);
+    }
+    for (t = GFX_TM_REINHARD; t < GFX_TM_COUNT; t = (nr_gfx_tonemap)(t + 1)) {
+        float prev = -1.0f, y0, y1;
+        c[0] = c[1] = c[2] = 1.0f; nr_gfx_tonemap_pixel(t, c);
+        CHECK(c[0] > 0.999f && c[1] > 0.999f && c[2] > 0.999f);
+        c[0] = c[1] = c[2] = 0.0f; nr_gfx_tonemap_pixel(t, c);
+        CHECK(c[0] == 0.0f && c[1] == 0.0f && c[2] == 0.0f);
+        for (i = 0; i <= 64; i++) {
+            c[0] = c[1] = c[2] = (float)i / 64.0f;
+            nr_gfx_tonemap_pixel(t, c);
+            CHECK(c[0] >= prev - 0.00001f);
+            CHECK(fabsf(c[0] - c[1]) < 0.0001f && fabsf(c[1] - c[2]) < 0.0001f);
+            prev = c[0];
+        }
+        c[0] = 1.0f; c[1] = 0.8f; c[2] = 0.0f;
+        y0 = color_hue_ratio(c);
+        nr_gfx_tonemap_pixel(t, c);
+        y1 = color_hue_ratio(c);
+        CHECK(c[0] <= 1.0f && c[1] <= 1.0f && c[2] >= 0.0f);
+        CHECK(fabsf(y1 - y0) < 0.08f);
+        c[0] = 0.08f; c[1] = 0.06f; c[2] = 0.10f;
+        nr_gfx_tonemap_pixel(t, c);
+        CHECK(c[0] > 0.02f && c[2] > 0.03f);
+    }
+    c[0] = c[1] = c[2] = 0.5f;
+    nr_gfx_color_grade(c, 1.0f);
+    CHECK(fabsf((0.2126f * nr_gfx_srgb_to_linear(c[0]) + 0.7152f * nr_gfx_srgb_to_linear(c[1]) + 0.0722f * nr_gfx_srgb_to_linear(c[2])) - nr_gfx_srgb_to_linear(0.5f)) < 0.002f);
+    c[0] = 1.0f; c[1] = 0.85f; c[2] = 0.0f;
+    nr_gfx_color_grade(c, 1.0f);
+    CHECK(c[0] <= 1.0f && c[1] <= 1.0f && c[1] > 0.75f);
+    c[0] = 0.0f; c[1] = 0.9f; c[2] = 0.9f;
+    nr_gfx_color_grade(c, 1.0f);
+    CHECK(c[1] <= 1.0f && c[2] <= 1.0f && fabsf(c[1] - c[2]) < 0.15f);
+    c[0] = c[1] = c[2] = 0.3f;
+    nr_gfx_color_grade(c, 0.0f);
+    CHECK(fabsf(c[0] - 0.3f) < 0.001f && fabsf(c[1] - 0.3f) < 0.001f && fabsf(c[2] - 0.3f) < 0.001f);
+}
+
 int main(int argc, char **argv)
 {
     bool update = argc > 1 && strcmp(argv[1], "--update-golden") == 0;
@@ -1019,6 +1128,9 @@ int main(int argc, char **argv)
     test_hle();
     test_audio_sync();
     test_swr();
+    test_color();
+    test_pgxp();
+    test_gfx_budget();
     test_discsel();
     test_hid();
     test_session();

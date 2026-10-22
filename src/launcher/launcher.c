@@ -13,6 +13,7 @@
 #include "../disc/discsel.h"
 #include "../input/input.h"
 #include "../render/postfx.h"
+#include "../platform/sysinfo.h"
 
 #include "../platform/nr_sdl.h"
 #ifdef NR_SDL3
@@ -83,6 +84,7 @@ typedef struct {
     bool running;
     bool font_warned;
     int autoplay;              /* test hook: 1 = press Play on this frame */
+    nr_sysinfo si;
 } launcher;
 
 /* ------------------------------------------------------------ settings */
@@ -438,7 +440,7 @@ static void tab_graphics(launcher *L)
 {
     nr_options *o = &L->st.o;
     nr_gfx_settings *g = &o->gfx;
-    int i, c;
+    int i, c, limit;
     {
 #ifdef _WIN32
         static const char *const ids[] = { "auto", "opengl", "d3d9", "d3d10", "d3d11", "d3d12", "software" };
@@ -458,23 +460,33 @@ static void tab_graphics(launcher *L)
         nr_strlcpy(o->renderer, ids[c], sizeof(o->renderer));
     }
     g->vsync = toggle_row(L, COL1, 1, T(S_VSYNC), T(S_H_VSYNC), g->vsync);
+    limit = nr_sysinfo_scale_limit(&L->si, nr_strcasecmp(o->renderer, "software") == 0);
     {
         char lab[8][48];
         const char *items[8];
+        int nres = limit < 8 ? limit : 8;
         for (i = 0; i < 8; i++) {
             if (i == 0) snprintf(lab[i], sizeof(lab[i]), "%s (320 x 240)", T(S_RES_NATIVE));
             else snprintf(lab[i], sizeof(lab[i]), "%dx (%d x %d)", i + 1, 320 * (i + 1), 240 * (i + 1));
             items[i] = lab[i];
         }
-        g->internal_scale = 1 + combo_row(L, COL1, 2, T(S_INTERNAL_RES), T(S_H_INTERNAL_RES), items, 8, g->internal_scale - 1);
+        if (g->internal_scale > nres) g->internal_scale = nres;
+        if (g->internal_scale < 1) g->internal_scale = 1;
+        g->internal_scale = 1 + combo_row(L, COL1, 2, T(S_INTERNAL_RES), T(S_H_INTERNAL_RES), items, nres, g->internal_scale - 1);
     }
     {
         static const int aa[5] = { 1, 2, 4, 8, 16 };
         const char *items[5];
+        int naa = 1;
         items[0] = T(S_OFF); items[1] = "2x (2 x 1)"; items[2] = "4x (2 x 2)"; items[3] = "8x (4 x 2)"; items[4] = "16x (4 x 4)";
+        for (i = 1; i < 5; i++) {
+            int ax, ay;
+            nr_gfx_aa_grid(aa[i], &ax, &ay);
+            if (g->internal_scale * ax <= limit && g->internal_scale * ay <= limit) naa = i + 1;
+        }
         c = 0;
-        for (i = 0; i < 5; i++) if (aa[i] == g->antialias) c = i;
-        g->antialias = aa[combo_row(L, COL1, 3, T(S_AA), T(S_H_AA), items, 5, c)];
+        for (i = 0; i < naa; i++) if (aa[i] <= g->antialias) c = i;
+        g->antialias = aa[combo_row(L, COL1, 3, T(S_AA), T(S_H_AA), items, naa, c)];
     }
     {
         const char *items[2];
@@ -764,6 +776,11 @@ static void tab_advanced(launcher *L)
         snprintf(t, sizeof(t), "fonts: %s", lt_font_info());
         lui_text_fit(u, lui_px(u, COL2), lui_px(u, row_y(1) + 44), lui_px(u, 13), LUI_DIM, t, lui_px(u, 430));
         if (lui_button(u, lui_r(u, COL2, row_y(3), 240, 30), T(S_BTN_OPEN_USER), false)) open_folder(nr_user_dir());
+        snprintf(t, sizeof(t), "CPU: %d threads, RAM: %llu MiB", L->si.cpu_threads, (unsigned long long)(L->si.ram_total >> 20));
+        lui_text_fit(u, lui_px(u, COL2), lui_px(u, row_y(4) + 8), lui_px(u, 13), LUI_DIM, t, lui_px(u, 430));
+        if (L->si.gpu_vram) snprintf(t, sizeof(t), "GPU: %s, %llu MiB", L->si.gpu_name[0] ? L->si.gpu_name : "?", (unsigned long long)(L->si.gpu_vram >> 20));
+        else snprintf(t, sizeof(t), "GPU: memory unknown");
+        lui_text_fit(u, lui_px(u, COL2), lui_px(u, row_y(4) + 30), lui_px(u, 13), LUI_DIM, t, lui_px(u, 430));
     }
 }
 
@@ -1045,6 +1062,7 @@ int main(int argc, char **argv)
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
     lt_init();
     settings_load(&L->st);
+    nr_sysinfo_query(&L->si);
     choose_ui_language(L);
     {
         SDL_Rect r;

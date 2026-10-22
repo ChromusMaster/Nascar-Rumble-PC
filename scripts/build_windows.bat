@@ -1,5 +1,4 @@
 @echo off
-rem Build NR Engine on Windows with CMake.
 setlocal
 for %%I in ("%~dp0..") do set "NR_ROOT=%%~fI"
 set "NR_SDK=%~1"
@@ -63,8 +62,21 @@ if not exist "%NR_BIN%\nrengine.exe" (
   echo error: nrengine.exe was not built.
   exit /b 1
 )
+echo == unit tests
+ctest --test-dir "%NR_BUILD%" -C %NR_TYPE% --output-on-failure
+if errorlevel 1 exit /b 1
+if "%NR_STYLE%"=="mingw" call :crt_notice
 echo Executables are in "%NR_BIN%".
 echo Start nrlauncher.exe. A shared SDL%NR_SDL_MAJOR% runtime is copied automatically by CMake.
+exit /b 0
+:crt_notice
+gcc -dumpspecs 2>nul | findstr /i /c:"ucrt" >nul
+if errorlevel 1 (
+  echo == C runtime: msvcrt.dll, available on every Windows version from Windows 7 to Windows 11.
+) else (
+  echo == C runtime: Universal CRT. Windows 10 and 11 include it. Windows 7 SP1, 8 and 8.1 need update KB2999226
+  echo    or a newer cumulative update. Use an MSVCRT-based MinGW-w64 toolchain to avoid that requirement.
+)
 exit /b 0
 :candidate
 if defined NR_SDL_DIR exit /b 0

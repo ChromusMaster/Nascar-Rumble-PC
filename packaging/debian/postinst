@@ -1,5 +1,4 @@
 #!/bin/sh
-# Reload udev rules so direct USB controller access works without a reboot.
 set -e
 if [ "$1" = "configure" ]; then
     if command -v udevadm >/dev/null 2>&1; then

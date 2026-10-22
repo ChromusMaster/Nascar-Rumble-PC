@@ -45,11 +45,21 @@ void nr_gfx_aa_grid(int aa, int *ax, int *ay);
  * max_scale per axis (anti-aliasing is lowered first, then the internal
  * resolution). Logs a warning when something had to be lowered. */
 const nr_gfx_settings *nr_gfx_fit(const nr_gfx_settings *s, int max_scale, nr_gfx_settings *tmp);
+u64 nr_gfx_render_budget(u64 ram_total, u64 gpu_memory, bool gpu_renderer);
+int nr_gfx_memory_scale_limit(u64 budget_bytes, unsigned copies);
+void nr_gfx_set_memory_scale_limit(int max_scale);
+int nr_gfx_get_memory_scale_limit(void);
 const char *nr_gfx_fx_name(nr_gfx_fx fx);
 const char *nr_gfx_tonemap_name(nr_gfx_tonemap t);
 
 /* Final colour adjustment chain shared by the software and GPU paths
  * (documented formulas so all backends match). Input/output 0..1. */
 void nr_gfx_grade_pixel(const nr_gfx_settings *s, float rgb[3]);
+float nr_gfx_srgb_to_linear(float c);
+float nr_gfx_linear_to_srgb(float c);
+float nr_gfx_tonemap_exposure(nr_gfx_tonemap t);
+void nr_gfx_fit_gamut(float linear_rgb[3], float luminance);
+void nr_gfx_tonemap_pixel(nr_gfx_tonemap t, float rgb[3]);
+void nr_gfx_color_grade(float rgb[3], float strength);
 
 #endif

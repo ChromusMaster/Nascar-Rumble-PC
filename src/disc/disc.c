@@ -88,7 +88,7 @@ static bool parse_cue(const char *cue, char *bin, size_t binlen, u32 *sector_siz
             } else {
                 if (sscanf(line + 4, " %255s", name) != 1) continue;
             }
-            snprintf(bin, binlen, "%s%s", dir, name);
+            if ((size_t)snprintf(bin, binlen, "%s%s", dir, name) >= binlen) continue;
             have_file = true;
         } else if (!have_track && strncmp(line, "TRACK", 5) == 0) {
             char mode[32] = { 0 };
@@ -271,7 +271,7 @@ static bool walk_dir(nr_disc *d, u32 lba, u32 size, const char *prefix, int dept
             name[nl] = 0;
             { char *semi = strchr(name, ';'); if (semi) *semi = 0; }
             if (name[0] && name[strlen(name) - 1] == '.') name[strlen(name) - 1] = 0;
-            snprintf(full, sizeof(full), "%s%s%s", prefix, *prefix ? "/" : "", name);
+            if ((size_t)snprintf(full, sizeof(full), "%s%s%s", prefix, *prefix ? "/" : "", name) >= sizeof(full)) { p += len; continue; }
             add_entry(d, full, elba, esz, (flags & 2) != 0, lba + i, p);
             if (flags & 2) {
                 if (!walk_dir(d, elba, esz, full, depth + 1)) return false;

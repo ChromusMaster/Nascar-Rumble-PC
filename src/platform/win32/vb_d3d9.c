@@ -347,7 +347,7 @@ static bool d9_init(nr_vbackend *b, void *window, const nr_gfx_settings *s, char
     }
     memset(&id, 0, sizeof(id));
     IDirect3D9Ex_GetAdapterIdentifier(d->d3d, D3DADAPTER_DEFAULT, 0, &id);
-    snprintf(b->description, sizeof(b->description), "Direct3D 9Ex (SM 3.0), %s, max texture %lux%lu", id.Description,
+    snprintf(b->description, sizeof(b->description), "Direct3D 9Ex (SM 3.0), %.64s, max texture %lux%lu", id.Description,
              (unsigned long)d->caps.MaxTextureWidth, (unsigned long)d->caps.MaxTextureHeight);
     if (!d9_configure(b, nr_gfx_fit(s, b->max_vram_scale, &fit))) { snprintf(err, n, "initial configuration not supported"); return false; }
     return true;

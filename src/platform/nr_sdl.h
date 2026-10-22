@@ -258,6 +258,16 @@ static inline nr_sdl_audio nr_sdl_audio_open(void)
     return SDL_OpenAudioDevice(NULL, 0, &want, NULL, 0);
 #endif
 }
+static inline const char *nr_sdl_audio_device_name(nr_sdl_audio a)
+{
+#ifdef NR_SDL3
+    const char *n = SDL_GetAudioDeviceName(SDL_GetAudioStreamDevice(a));
+    return n ? n : "unknown";
+#else
+    (void)a;
+    return "system default";
+#endif
+}
 static inline void nr_sdl_audio_pause(nr_sdl_audio a, bool pause)
 {
 #ifdef NR_SDL3

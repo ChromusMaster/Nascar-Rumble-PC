@@ -373,9 +373,9 @@ u32 gte_read_data(psx_gte *g, int r)
     case SXYP: return g->d[SXY2];
     case IRGB: case ORGB: {
         s32 r1 = (s16)g->d[IR1] >> 7, g1 = (s16)g->d[IR2] >> 7, b1 = (s16)g->d[IR3] >> 7;
-        if (r1 < 0) r1 = 0; if (r1 > 0x1F) r1 = 0x1F;
-        if (g1 < 0) g1 = 0; if (g1 > 0x1F) g1 = 0x1F;
-        if (b1 < 0) b1 = 0; if (b1 > 0x1F) b1 = 0x1F;
+        r1 = r1 < 0 ? 0 : r1 > 0x1F ? 0x1F : r1;
+        g1 = g1 < 0 ? 0 : g1 > 0x1F ? 0x1F : g1;
+        b1 = b1 < 0 ? 0 : b1 > 0x1F ? 0x1F : b1;
         return (u32)r1 | ((u32)g1 << 5) | ((u32)b1 << 10);
     }
     default:

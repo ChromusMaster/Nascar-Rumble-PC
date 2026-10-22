@@ -132,6 +132,24 @@ Each item may produce behaviour different from the real hardware.
 
 ### Emulation fixes recorded
 
+- *Tone mapping and colour grading (0.3.3, presentation only)*: the tone
+  curves were applied per channel to gamma-encoded values (ACES capped white
+  at 75 %, crushed dark tones and shifted saturated hues) and the colour
+  grade raised saturation with hard clipping, which made yellow, orange and
+  cyan glare and black, grey and purple too contrasted. The curves now act on
+  linear luminance, are normalised to white and never push a channel out of
+  range; the grade keeps luminance and uses vibrance. Console VRAM is not
+  affected; the boot400 and race5600 golden values are unchanged
+  (9B2E1255, 50A0F62F, verified on Windows with the reference disc).
+- *PGXP cache (0.3.3, presentation only)*: entries never expired and the last
+  of several vertices projected to the same pixel won, so polygons received
+  depths from other vertices or from earlier frames. Entries now expire after
+  two display flips and conflicting depths in the same frame disable the
+  entry. Golden values unchanged.
+- *Audio output (0.3.3, diagnostics)*: the opened output device and audio
+  driver are logged. Investigation of a "no sound" report found the SPU
+  producing sound, SDL3 consuming it at the device rate and the stream routed
+  to the system default output device; no defect was found in the engine.
 - *Memory card not detected (0.3.2)*: the game reported "No MEMORY CARD"
   even with a card image. Its card driver relies on the retail BIOS event
   sequence: `_card_load` reads 16 directory sectors and produces a HwCARD

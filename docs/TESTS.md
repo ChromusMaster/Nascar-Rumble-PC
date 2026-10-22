@@ -35,6 +35,9 @@ packaging.
 | `discsel/overlay` | image detection in `gamedata/` by content, precedence of choices; replacing a file with a larger one (virtual sectors) without changing the image file; INI update keeping comments and section headers |
 | `hid` | HID report-descriptor parser and report decoding: "PC Twin Shock"-style pad (5 axes, hat, 12 buttons, vendor padding) and a game pad with report IDs |
 | `session` | launcher session token: 32 hex digits, unique, accepted only when the command line and the environment match |
+| `color` | sRGB round trip; every tone curve keeps black and white, is monotonic and neutral on greys, keeps the hue of saturated yellow and does not crush dark purple; colour grade keeps grey luminance, does not clip saturated yellow and cyan, and is the identity at strength 0 |
+| `pgxp` | precision cache hit/miss, tolerance for the same vertex, conflict detection, expiry after two flips |
+| `gfx budget` | memory budget → per-axis limit, render budget for GPU/software, `nr_gfx_fit` lowering AA first and then the internal resolution under a memory limit |
 
 ### With the user's data (`NR_DISC`)
 

@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(nrengine VERSION 0.3.3 LANGUAGES C)
+project(nrengine VERSION 0.0.4 LANGUAGES C)
+set(NR_VERSION_PRERELEASE "alpha01")
+set(NR_VERSION_FULL "${PROJECT_VERSION}-${NR_VERSION_PRERELEASE}")
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -44,7 +46,7 @@ set(NR_CORE_SOURCES
 
 add_library(nrcore STATIC ${NR_CORE_SOURCES})
 target_include_directories(nrcore PUBLIC src)
-target_compile_definitions(nrcore PUBLIC NR_VERSION_STRING="${PROJECT_VERSION}")
+target_compile_definitions(nrcore PUBLIC NR_VERSION_STRING="${NR_VERSION_FULL}")
 if(WIN32)
   target_link_libraries(nrcore PUBLIC shell32 bcrypt)
 else()
@@ -221,7 +223,9 @@ if(UNIX AND NOT APPLE)
   install(FILES packaging/linux/70-nrengine-gamepads.rules DESTINATION ${NR_UDEV_DIR})
 
   set(CPACK_PACKAGE_NAME "nrengine")
-  set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+  set(CPACK_PACKAGE_VERSION "${NR_VERSION_FULL}")
+  set(CPACK_DEBIAN_PACKAGE_VERSION "${PROJECT_VERSION}~${NR_VERSION_PRERELEASE}")
+  set(CPACK_DEBIAN_PACKAGE_EPOCH 1)
   set(CPACK_PACKAGE_CONTACT "NR Engine maintainers <nrengine@localhost>")
   set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Reimplementation engine for NASCAR Rumble (requires your own disc)")
   set(CPACK_PACKAGE_DESCRIPTION "NR Engine runs the PlayStation game NASCAR Rumble from the user's own disc
@@ -230,7 +234,12 @@ controller support. No game data is included.")
   set(CPACK_STRIP_FILES ON)
   set(CPACK_DEBIAN_PACKAGE_SECTION "games")
   set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-  set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+  set(NR_DEB_ARCH "amd64")
+  find_program(NR_DPKG dpkg)
+  if(NR_DPKG)
+    execute_process(COMMAND ${NR_DPKG} --print-architecture OUTPUT_VARIABLE NR_DEB_ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
+  endif()
+  set(CPACK_DEBIAN_FILE_NAME "${CPACK_PACKAGE_NAME}_${PROJECT_VERSION}~${NR_VERSION_PRERELEASE}_${NR_DEB_ARCH}.deb")
   # dpkg-shlibdeps computes Depends from the binaries when SDL2 comes from the
   # distribution's libsdl2-dev. With a self-built SDL2 (no package to query)
   # set -DNR_DEB_SHLIBDEPS=OFF and the fixed list below is used instead

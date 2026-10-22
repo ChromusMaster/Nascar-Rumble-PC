@@ -4,6 +4,11 @@ This document records what is implemented, what was validated and how, the
 known differences from the original hardware/game and what is missing.
 **Full compatibility with the original game is not claimed.**
 
+Current version: **0.0.4-alpha01** (alpha, in development). Versions 0.1.0
+to 0.3.2 were internal development builds; the numbering restarted at
+0.0.4-alpha01 to make the project's stage clear. The Debian package uses the
+epoch `1:` so that `1:0.0.4~alpha01` replaces an installed 0.3.x package.
+
 Reference used for all validation: NASCAR Rumble (USA), SLUS-01068, CUE/BIN
 image of 111 075 sectors, executable SHA-1
 `2726ac3e6f3d756f78982f7c66e507fc3aaf7aff`.
@@ -132,7 +137,7 @@ Each item may produce behaviour different from the real hardware.
 
 ### Emulation fixes recorded
 
-- *Tone mapping and colour grading (0.3.3, presentation only)*: the tone
+- *Tone mapping and colour grading (0.0.4-alpha01, presentation only)*: the tone
   curves were applied per channel to gamma-encoded values (ACES capped white
   at 75 %, crushed dark tones and shifted saturated hues) and the colour
   grade raised saturation with hard clipping, which made yellow, orange and
@@ -141,12 +146,12 @@ Each item may produce behaviour different from the real hardware.
   range; the grade keeps luminance and uses vibrance. Console VRAM is not
   affected; the boot400 and race5600 golden values are unchanged
   (9B2E1255, 50A0F62F, verified on Windows with the reference disc).
-- *PGXP cache (0.3.3, presentation only)*: entries never expired and the last
+- *PGXP cache (0.0.4-alpha01, presentation only)*: entries never expired and the last
   of several vertices projected to the same pixel won, so polygons received
   depths from other vertices or from earlier frames. Entries now expire after
   two display flips and conflicting depths in the same frame disable the
   entry. Golden values unchanged.
-- *Audio output (0.3.3, diagnostics)*: the opened output device and audio
+- *Audio output (0.0.4-alpha01, diagnostics)*: the opened output device and audio
   driver are logged. Investigation of a "no sound" report found the SPU
   producing sound, SDL3 consuming it at the device rate and the stream routed
   to the system default output device; no defect was found in the engine.
